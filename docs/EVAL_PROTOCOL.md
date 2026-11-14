@@ -311,5 +311,8 @@ observed directional accuracy (or 100%), the cost hurdle is stated plainly.
 
 ## 11. Deviations
 
-*(Empty at pre-registration. Any post-hoc change is appended here with its reason and a
-separate commit, before the affected result is reported.)*
+**No post-run deviations.** The only change made after the first commit was the pre-run
+hold-out amendment recorded in §5.1 (`cb75162`), made before any model fit. The global-series
+construction in §2.3 was part of the pre-registration, not a post-hoc change. The implementation
+file names and the `make eval` / `scripts/check_eval.py` substitution are recorded in
+`docs/RESULTS.md` §8 and `docs/PLAN.md` Stage 3.
