@@ -13,7 +13,7 @@
 | G1-final | done | — | **D19: apply the +1 relabel** (owner) |
 | 2a | done | `d5b8dcd`, `75c927e` | reversible date correction + tests + verification |
 | 2b | done | `147d58b`, `5c6a74a`, `66b2353` | scope reduction, minimal API, repo hygiene |
-| 3 | next | — | honest modeling + three-variant sensitivity analysis |
+| 3 | done | `798981a`, `cb75162`, `37585ac`, `8d7715e`, `64c9798`, `5f4abaa` | no demonstrated edge; V1/V2/V3 sensitivity; artifact committed |
 | 4 | pending | — | backtest or no-edge analysis |
 | 5 | pending | — | reproducibility + docs |
 
@@ -127,26 +127,55 @@ Slim tree; `requirements.txt` that installs; `data/sample/`; this plan updated. 
 **Goal:** find out whether a signal exists, with an evaluation that cannot flatter the model.
 
 ### Checklist
-- [ ] Replace raw-level features (`SMA_7`, `MACD`, `Bollinger_*` are price levels, 10M–200M Rial) with stationary ones: returns, price-normalized indicators, realized volatility. The audit measured train→test shifts of SMA_7 +13.3σ, Bollinger_Upper +13.6σ, MACD +6.6σ.
-- [ ] Implement walk-forward validation with a fixed, declared fold scheme (no shuffling, no leakage).
-- [ ] Always report, side by side: **persistence** and **ridge** baselines, on the identical folds.
-- [ ] Report log-return R² (not price-level R²), RMSE, MAE, directional accuracy **with a binomial test**, and **Diebold–Mariano** vs persistence.
-- [ ] Report prediction dispersion (std, min, max) to expose near-constant output — the audit measured pred std 0.00057 vs actual 0.0275.
-- [ ] Save machine-readable results to `reports/` and paste the console output into `docs/RESULTS.md`.
+- [x] Replace raw-level features with stationary ones. The frozen 23-feature set lives in
+  `src/feature_eng.py::add_stationary_features` and is the single source of truth for training
+  and serving. The audit's train→test shifts (SMA_7 +13.3σ, Bollinger_Upper +13.6σ, MACD +6.6σ)
+  are no longer present as raw levels.
+- [x] Implement expanding-window walk-forward validation with five chronological folds, a 30-row
+  purge, a 5-row embargo and scalers fit only on each fold's fitting rows.
+- [x] Report persistence and ridge baselines on identical folds, alongside the LSTM.
+- [x] Report log-return RMSE/MAE, OOS R² vs zero and vs the historical mean, directional
+  accuracy with a binomial test **against the up-day base rate**, Diebold–Mariano vs persistence
+  with HAC variance and the HLN correction, block-bootstrap CIs, and prediction dispersion.
+- [x] Save machine-readable results to `results/` and paste the console output into
+  `docs/RESULTS.md`.
 
-### Deliverables
-`src/features_stationary.py` (or equivalent), `src/walkforward.py`, `scripts/run_eval.py`, `reports/eval_walkforward.json`, `docs/RESULTS.md`.
+### Executed — Stage 3 (`798981a`, `cb75162`, `37585ac`, `8d7715e`, `64c9798`, `5f4abaa`)
+- [x] `docs/EVAL_PROTOCOL.md` pre-registered before any model fit; one pre-run hold-out amendment
+  (2025-10-01 cutoff, 210 rows) at `cb75162`; no post-run deviations.
+- [x] Data variants: V1 raw, V2 corrected (primary), V3 block excluded. V2 re-pairs the global
+  series with one complete Yahoo vintage (D23); V3 drops the block and never lets an LSTM
+  sequence cross the gap.
+- [x] Models: persistence, historical mean, ridge-own, ridge-full, stationary LSTM (5 seeds),
+  legacy-spec LSTM (3 seeds, V2 only). Four fixed configurations; no tuning.
+- [x] Run: `python -m src.evaluate --variant all --artifact`, 1,259.6 s (21.0 min), 109 LSTM
+  fits, inside the 90-minute budget.
+- [x] Tests: 35 passed (15 new protocol tests, 6 date-shift tests, 14 pipeline tests).
+- [x] Artifact: `models/gold_lstm_stationary_v2.keras` + two scalers + metadata, trained on V2
+  pre-hold-out rows, seed 42. Not wired into the API or Streamlit.
+- [x] **Verdict: no demonstrated edge.** The stationary LSTM's walk-forward RMSE is 0.018214 vs
+  persistence 0.018350 (R² +0.0148, DM p 0.2251, bootstrap CI [−0.0272, +0.0561]); hold-out
+  0.026543 vs 0.026545 (R² +0.0001, DM p 0.4984, CI [−0.0577, +0.0630]). Ridge-own beats
+  persistence only on the walk-forward; ridge-full is worse in both. The historical mean is the
+  only significant walk-forward DM (p 0.0055), but it fails on the hold-out (p 0.2428). V1 vs V2
+  and V3 change no conclusion. Full tables in `docs/RESULTS.md`.
 
-### Acceptance criterion (must be runnable)
+### Acceptance criterion (as executed)
 ```bash
-make eval                     # exits 0
-python scripts/check_eval.py  # exits 0: report has persistence + ridge + lstm rows,
-                              # every row has dm_pvalue_vs_persistence and dir_acc_n,
-                              # and no metric is reported at price level without the label "persistence baseline"
+.venv/bin/python -m src.evaluate --variant all --artifact   # exits 0, writes results/ + artifact
+PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
+  /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q   # 35 passed
 ```
 
+The old `make eval` / `scripts/check_eval.py` acceptance text was a Stage 5 deliverable (Makefile
+and scripts); the runnable entry point above is the Stage 3 deliverable. The old file names
+(`src/features_stationary.py`, `src/walkforward.py`, `scripts/run_eval.py`, `reports/`) were
+superseded by `src/feature_eng.py::add_stationary_features`, `src/eval_data.py`,
+`src/eval_metrics.py`, `src/evaluate.py` and `results/`.
+
 ### GATE 3
-**Owner reviews the results before any narrative is written.** If the edge is still zero, the plan continues as a negative result — but the owner confirms the framing first.
+**Owner reviews the results before any narrative is written.** If the edge is still zero, the plan
+continues as a negative result — but the owner confirms the framing first. **Stage 3 stops here.**
 
 ---
 

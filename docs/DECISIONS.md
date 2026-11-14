@@ -256,6 +256,91 @@ Delete the live bot, the MLOps layer, monitoring, supervisor/startup scripts, ex
 
 ---
 
+## D21 — Stage 3 protocol is pre-registered before any model fit
+
+**Date:** 2026-11-14 · **Status:** accepted · **Executed in Stage 3**
+
+`docs/EVAL_PROTOCOL.md` was written and committed (`798981a`) before `results/` existed or any
+model was fit. It fixes the task, information timing, the 23-feature set, the three variants,
+five expanding folds with purge/embargo, six models, the metrics, the edge rule and the cost
+sanity check.
+
+**Pre-run amendment (`cb75162`).** The first draft said "the final 180 rows". A data-shape check
+showed those begin 2025-11-05 and would skip October; the hold-out is instead all rows dated
+2025-10-01 or later (210 rows), matching the requested "~180 rows, 2025-10 onward". The amendment
+was made **before any model fit**. No post-run deviations.
+
+**Consequences:** the edge rule is not renegotiated after seeing results. V1/V3 and the
+legacy-spec LSTM are explicitly not eligible for the headline verdict.
+
+---
+
+## D22 — Stationary feature set is frozen; no hyperparameter search
+
+**Date:** 2026-11-14 · **Status:** accepted · **Executed in Stage 3**
+
+The 23 stationary features in `src/feature_eng.py::add_stationary_features` are the single source
+of truth for training and serving: gold-return lags 1/2/3/5; USD-return lags 0/1/2/5 (same-day USD
+is allowed because the TGJU USD close is available with the gold close); ounce-return lags 1/2/5
+(global bars lagged one trading day); oil-return lags 1/5; RSI(14); price-normalised MACD and
+signal; Bollinger %B and bandwidth (20); price/SMA−1 (7/20/60); realised volatility (5/20). No raw
+price level and no calendar dummy.
+
+One fixed configuration per model family: ridge `alpha=1.0`; LSTM 64→32→16 with dropout 0.3,
+Adam 1e-3, batch 16, max 60 epochs, early stopping 10, ReduceLROnPlateau 5/0.5/1e-5. No tuning.
+Seeds are repetitions: 5 stationary, 3 legacy. The number of configurations tried is **four**
+(ridge-own, ridge-full, stationary LSTM, legacy LSTM), disclosed in `docs/RESULTS.md`.
+
+**Reason:** with ~1,150 pre-hold-out rows and a 210-row hold-out, a hyperparameter search would be
+a multiple-testing exercise with little power. Freezing the configuration keeps the edge rule
+honest.
+
+---
+
+## D23 — V2 re-pairs the global series with one complete Yahoo vintage
+
+**Date:** 2026-11-14 · **Status:** accepted · **Executed in Stage 3**
+
+The committed CSV stores the Yahoo columns only on the original Iranian dates. V2 needs global
+bars on corrected dates absent from the CSV: 110 of the 503 merged block rows, 83 of them
+Thursdays. A date-label-only shift would leave the old global pairing and would not correct the
+block. All three variants therefore use one complete Yahoo series (`GC=F`, `BZ=F`) for the same
+period, merged onto the Iranian dates with the loader's `how='left'` + `ffill` rule; V2 relabels
+the Iranian block dates +1 before that merge. The Iranian series is unchanged.
+
+**Verification:** fresh oil matches the CSV exactly on 911/911 overlapping dates; fresh ounce
+differs by a median 0.33% in level and 0.018% in log return (corr 0.993), the stale-vintage
+effect already noted in `docs/DATA_INTEGRITY.md`.
+
+**Consequence:** V1/V2 differ only in the date correction and the resulting global pairing, not
+in the Iranian prices or the global vintage. The V1/V2 differences are tiny; see
+`docs/RESULTS.md` §3.
+
+---
+
+## D24 — Stage 3 verdict: no demonstrated edge; artifact not wired in
+
+**Date:** 2026-11-14 · **Status:** accepted · **Executed in Stage 3**
+
+Under the pre-registered rule (`docs/EVAL_PROTOCOL.md` §8), no eligible V2 stationary model
+demonstrates edge. The stationary LSTM beats persistence on RMSE in both samples (walk-forward
+0.018214 vs 0.018350; hold-out 0.026543 vs 0.026545) but fails the DM significance (p = 0.2251 /
+0.4984) and the bootstrap R² CI ([−0.0272, +0.0561] / [−0.0577, +0.0630]). Ridge-own beats
+persistence only on the walk-forward; ridge-full is worse in both. The historical-mean drift is
+the only model with a significant walk-forward DM (p = 0.0055), but it fails on the hold-out
+(p = 0.2428); it is the nominal uptrend, not timing skill.
+
+The primary artifact is `models/gold_lstm_stationary_v2.keras` +
+`models/scaler_X_stationary_v2.pkl` + `models/scaler_y_stationary_v2.pkl` + metadata, trained on
+V2 pre-hold-out rows (fit 2021-08-28 → 2024-12-31, validation 2025-02-08 → 2025-09-30, seed 42).
+It is **not** wired into the API or Streamlit; the existing `models/gold_lstm_v2.keras` remains
+for the API.
+
+**Consequence:** Stage 4 is a no-edge / cost-hurdle analysis unless the owner directs otherwise.
+The README is not rewritten in Stage 3.
+
+---
+
 ## Open decisions
 
 These are the owner's calls. Each names the stage it blocks.

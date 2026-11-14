@@ -1,11 +1,12 @@
 # Project State
 
 **Date:** 2026-11-14
-**Stage:** Stages 0–2b complete. The data correction is applied; the repo is cut down to the kept code and a minimal API. **Stopped at the end of Stage 2b, before Stage 3.**
+**Stage:** Stage 3 complete. Honest evaluation run, artifact committed, **stopped at GATE 3**. No README/API/Streamlit/Dockerfile/trading_bot changes; Stage 4 not started.
 **Branch:** `refactor/honest-portfolio`
 **Baseline tag:** `legacy-pre-refactor` → `d1670cc` (annotated)
 **Pre-refactor description:** `docs/AUDIT_REPORT.md` (2026-11-13)
 **Data-quality authority:** `docs/DATA_INTEGRITY.md` (includes "Stage 1b" and "Stage 2a — Applied fix")
+**Evaluation authority:** `docs/EVAL_PROTOCOL.md` (pre-registered) and `docs/RESULTS.md` (measured)
 
 ---
 
@@ -64,18 +65,32 @@
 - `requirements.txt` rebuilt from actual imports: adds `yfinance`, `curl_cffi`, `requests`, `pytest`; removes `mlflow`, `evidently`, `onnxruntime`, `tf2onnx`, `schedule`, `prometheus-*`, `aiofiles`, `psutil`. TensorFlow/Keras pins kept. Notebook-only libraries are listed as optional comments.
 - **Scalers are not committed** (`models/scaler_X.pkl`, `models/scaler_y.pkl` are untracked and ignored). **Stage 3 regenerates the model and both scalers and commits them together**, so the committed model and scalers always come from the same training run.
 
+### Stage 3 — honest modeling and evaluation (`798981a`, `cb75162`, `37585ac`, `8d7715e`, `64c9798`, `5f4abaa`)
+
+- **Protocol pre-registered before any model fit.** `docs/EVAL_PROTOCOL.md` (`798981a`) fixes the task, information timing, 23-feature set, V1/V2/V3 variants, five expanding folds with 30-row purge / 5-row embargo, six models, metrics, the edge rule and cost sanity. One **pre-run** amendment (`cb75162`): the hold-out is all rows from 2025-10-01 (210 rows), not the literal last 180 rows, which begin 2025-11-05 and would skip October. No post-run deviations.
+- **Data.** Iranian series from the untracked local snapshot (1,424 rows, 2021-06-14 → 2026-06-13). One complete Yahoo `GC=F`/`BZ=F` pull for all variants (cached at `data/raw/global_yahoo.csv`), because the CSV lacks 110 corrected-date global bars (83 Thursdays). V2 relabels 503 merged block dates +1 before the global merge; V3 drops the block and keeps LSTM sequences inside segments. Fresh oil matches the CSV 911/911; fresh ounce differs by a median 0.33% in level / 0.018% in log return (corr 0.993).
+- **Features.** 23 stationary features, single source of truth in `src/feature_eng.py::add_stationary_features` (gold/USD/ounce/oil return lags, RSI 14, MACD/price, Bollinger %B and bandwidth 20, price/SMA−1 7/20/60, RV 5/20). No raw price level, no calendar dummy.
+- **Models.** Persistence, historical mean, ridge-own (4 gold lags), ridge-full (23 features), stationary LSTM 64→32→16 (5 seeds), legacy-spec LSTM on the old 15 raw-level features (3 seeds, V2 only). Four fixed configurations, no tuning; 109 LSTM fits.
+- **Run.** `.venv/bin/python -m src.evaluate --variant all --artifact`, **1,259.6 s (21.0 min)**, inside the 90-minute budget. Tests: **35 passed** (15 protocol tests + 6 date-shift + 14 pipeline).
+- **Verdict: no demonstrated edge.** V2 stationary LSTM: walk-forward RMSE 0.018214 vs persistence 0.018350 (R² +0.0148, DM p 0.2251, bootstrap CI [−0.0272, +0.0561]); hold-out 0.026543 vs 0.026545 (R² +0.0001, DM p 0.4984, CI [−0.0577, +0.0630]). Ridge-own beats persistence only on the walk-forward (0.018299, p 0.3264); hold-out 0.026704 (worse). Ridge-full is worse in both. The historical mean is the only significant walk-forward DM (p 0.0055, CI [+0.0032, +0.0338]) but fails on the hold-out (p 0.2428, CI [−0.0116, +0.0287]).
+- **Sensitivity.** V1 vs V2 changes no conclusion (largest relative move: LSTM walk-forward RMSE −0.24%; baselines and ridge-own identical). V3 changes no conclusion; it is a different period/sample (300 walk-forward test rows, LSTM coverage 271/300) and makes ridge-full worse (WF R² −0.2555), not better. The block was a data-integrity defect, not the source of the model's failure.
+- **Legacy vs stationary.** Legacy LSTM WF RMSE 0.018243 / R² +0.0116; HO 0.026631 / R² −0.0065. Stationary is slightly better; both are near persistence. Feature design alone does not create an edge.
+- **Cost sanity.** At 1.5% round-trip cost the break-even directional accuracy is 108.9% (WF) / 95.4% (HO); at 3% it is 167.8% / 140.9%. Observed accuracy is ~51–57%.
+- **Artifact.** `models/gold_lstm_stationary_v2.keras` + `models/scaler_X_stationary_v2.pkl` + `models/scaler_y_stationary_v2.pkl` + `models/gold_lstm_stationary_v2.metadata.json`, trained on V2 pre-hold-out rows (fit 2021-08-28 → 2024-12-31, validation 2025-02-08 → 2025-09-30, seed 42). Not wired into the API or Streamlit; `models/gold_lstm_v2.keras` remains for the API.
+- **Results files.** `results/eval_V1.json`, `results/eval_V2.json`, `results/eval_V3.json`, `results/eval_summary.csv`, `results/run.log`. Full tables and interpretation in `docs/RESULTS.md`.
+
 ## Next
 
-**Stage 3 — honest modeling and evaluation.** Normalize the raw-level features (D16), use walk-forward validation, report persistence/ridge/LSTM side by side, and run the **three-variant sensitivity analysis required by D19: raw, corrected, block excluded**, on identical folds. The README must report all three. Regenerate and commit model + scalers together.
+**GATE 3 — owner reviews `docs/RESULTS.md`.** The pre-registered verdict is **no demonstrated edge**. If the owner confirms the framing, Stage 4 is the no-edge / cost-hurdle analysis (`docs/NO_EDGE.md`) or a defensible out-of-sample backtest, per the Stage 4 decision. The README is not rewritten until Stage 5.
 
 ## Blockers
 
-None. G1-final is resolved by D19; O1–O8 are resolved as D10–D17.
+None. G1-final is resolved by D19; O1–O8 are resolved as D10–D17; Stage 3 is complete.
 
 ## Known stale artifacts
 
 - `README.md` is still the pre-refactor document. It describes components deleted in Stage 2b, quotes metrics that contradict the artifacts, and labels Rial as Toman. **Do not quote it.** Stage 5 rewrites it; Stage 3 supplies the numbers, including the three data variants required by D19.
-- `models/gold_lstm_v2.keras` is the pre-refactor model. It is still tracked so the API has something to load, but Stage 3 replaces it and commits the new model together with its scalers.
+- `models/gold_lstm_v2.keras` is the pre-refactor model. It is still tracked so the API has something to load. Stage 3 did **not** replace it; the new primary artifact is `models/gold_lstm_stationary_v2.keras` + its scalers + metadata, and it is not wired into the API or Streamlit.
 - `notebooks/` are kept as history. They import `catboost`, `lightgbm`, `xgboost` and `statsmodels`, which are **not** installed by `requirements.txt` (listed there as optional comments).
 
 ---
@@ -138,6 +153,28 @@ Everything below was produced by a command in this session. Nothing here is copi
 | Block Friday: median abs return **1.179%**, zero-change share **0.00**, n=86 | B2.5 |
 | Relabel +1: **0 collisions**, 502 rows moved, row count 3,554 / 4,002 unchanged | B5 |
 | `signal_history.jsonl`: 7 records, **6 at ratio 100.0**, 1 at **10,000.0** | read in Stage 1b from `api_layer/cache/signal_history.jsonl` (deleted in Stage 2b); see D15 |
+
+### Stage 3 verified facts
+
+| Fact | How verified |
+|---|---|
+| Protocol committed before any model fit; one pre-run hold-out amendment | `git log -- docs/EVAL_PROTOCOL.md` (`798981a`, `cb75162`); no `results/` before `798981a` |
+| Feature frame: **1,364** rows for V1/V2; **860** for V3 | `results/eval_V1.json` / `eval_V3.json` metadata; run log |
+| Hold-out: **210** rows, **2025-10-01 → 2026-06-11** | `results/eval_V2.json` metadata |
+| Walk-forward: **5** folds; pooled **n=552** (V1/V2), **300** (V3) | `results/eval_summary.csv` |
+| V2 stationary LSTM WF: RMSE **0.018214** vs persistence **0.018350**, R² **+0.0148**, DM p **0.2251**, boot R² **[−0.0272, +0.0561]** | `results/eval_V2.json` / `eval_summary.csv` |
+| V2 stationary LSTM HO: RMSE **0.026543** vs persistence **0.026545**, R² **+0.0001**, DM p **0.4984**, boot R² **[−0.0577, +0.0630]** | same |
+| V2 ridge-own: WF RMSE **0.018299** (R² +0.0056, p 0.3264); HO RMSE **0.026704** (worse) | same |
+| V2 ridge-full: WF RMSE **0.018846** (R² −0.0548); HO RMSE **0.026798** (R² −0.0192) | same |
+| V2 historical mean: WF p **0.0055**, R² **+0.0175**, CI **[+0.0032, +0.0338]**; HO p **0.2428**, CI **[−0.0116, +0.0287]** | same |
+| V2 legacy LSTM: WF RMSE **0.018243**, R² **+0.0116**; HO RMSE **0.026631**, R² **−0.0065** | same |
+| V1 vs V2: baselines and ridge-own identical; LSTM WF RMSE **0.018258 → 0.018214** (−0.24%); HO **0.026575 → 0.026543** (−0.12%) | `eval_V1.json` vs `eval_V2.json` |
+| V3: WF **n=300**, LSTM coverage **271/300**; HO **n=210**; ridge-full WF R² **−0.2555**; no edge | `eval_V3.json` |
+| Edge verdict: **no demonstrated edge** (all three eligible models fail) | `results/eval_V2.json` → `edge_verdict` |
+| Cost break-even: **108.9% / 95.4%** at 1.5%, **167.8% / 140.9%** at 3% | `eval_V2.json` → `cost_sanity` |
+| Run time **1,259.6 s (21.0 min)**; **109** LSTM fits | run log; `results/eval_*.json` metadata |
+| Tests: **35 passed** (15 protocol + 6 date-shift + 14 pipeline) | pytest output, `docs/RESULTS.md` §9 |
+| Artifact: 35,489 params, input `(None, 30, 23)`, seed 42 | `models/gold_lstm_stationary_v2.keras` + metadata |
 
 ## Stage 2b acceptance outputs
 
@@ -281,6 +318,9 @@ wc -l data/raw/final_gold_dataset.csv data/processed/advanced_gold_features.csv
 python3 -m venv /tmp/pytest-scratch && /tmp/pytest-scratch/bin/pip install pytest
 PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
   /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q
+
+# Stage 3 evaluation (writes results/ and the primary artifact; needs the local raw snapshot)
+.venv/bin/python -m src.evaluate --variant all --artifact
 
 # Minimal API
 .venv/bin/python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000
