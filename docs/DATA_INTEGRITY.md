@@ -954,3 +954,81 @@ python /tmp/s1b/align3.py
 ```
 
 The scratch scripts live in `/tmp/s1b` (`jalali.py`, `validate_jalali.py`, `offsets.py`, `align5.py`, `naive.py`, `align3.py`) and will not survive a reboot. Every figure quoted above is produced by one of them; the code blocks are raw output, the weekday and holiday tables restate it. `align2.py` and `align4.py` were superseded intermediate versions and are not needed to reproduce anything.
+
+---
+
+# Stage 2a — Applied fix
+
+**Date:** 2026-11-14 · **Branch:** `refactor/honest-portfolio` · **Decision:** D19 (G1-final = apply)
+**Scope:** one source change, no raw data touched. Raw files are read, never rewritten.
+
+The owner's G1-final call was to apply the correction **as a reversible, documented transform** rather than by editing raw data. It is implemented in the loader:
+
+| | |
+|---|---|
+| **Where** | `src/data_loader.py` → `apply_block_date_shift()`, called from `DataLoader.get_tgju_history()` after the date is parsed and **before** the gold/USD merge |
+| **Window** | `config/settings.py` → `DataConfig.DATE_SHIFT_WINDOW_START = 2023-10-27`, `DATE_SHIFT_WINDOW_END = 2025-08-06` |
+| **Amount / switch** | `DATE_SHIFT_DAYS = 1`, `DATE_SHIFT_ENABLED = True` |
+| **What moves** | the `Date` label only. `Gold_IRR` / `USD_IRR` values are not modified |
+| **Every run** | logs `rows_relabeled=<n>` for each series, including `0` when disabled or out of window |
+| **Safety** | raises `ValueError` if the shift would create duplicate dates, instead of silently corrupting the merge |
+
+Because the shift is applied to each Iranian series **before** the outer merge, gold and USD move together. A partial fix would introduce lookahead (§9.3).
+
+## Verification on the committed local dataset (no network)
+
+`data/raw/final_gold_dataset.csv`, 1,424 rows, 2021-06-14 → 2026-06-13. The helper was applied to the merged frame, which is equivalent to the loader's per-series application on the date axis (both series share identical block boundaries, §7).
+
+```
+rows relabeled:        503
+row count:             1,424 -> 1,424 (unchanged)
+duplicate dates:       0
+prices unchanged:      True  (Gold_IRR, USD_IRR, Ounce_USD, Oil_USD byte-identical)
+index unique/monotonic: True / True
+processed features:    1,424 -> 1,394 rows (unchanged; index unique and monotonic)
+```
+
+Weekday histogram, before → after:
+
+| | Mon | Tue | Wed | Thu | Fri | Sat | Sun | Sat–Wed |
+|---|---|---|---|---|---|---|---|---|
+| before | 241 | 243 | 240 | **137** | **90** | 237 | 236 | 84.1% |
+| after | 239 | 241 | 243 | **220** | **4** | 241 | 236 | 84.3% |
+
+The 86 block Friday rows become Saturdays and the 83 block Wednesdays become Thursdays; the 4 remaining Fridays are genuine rows outside the block. The Sat–Wed share barely moves because the block was already Sat–Wed-heavy — the defect was *which* day carried the weekend move, not the working-week share.
+
+## Alignment check inside the former block
+
+Using only the committed CSV, "real" ounce bars were reconstructed as rows where `Ounce_USD` changes from the previous row (this drops the forward-filled weekends, §8). For every Iranian row `d` whose `d` and `d+1` are both real bars, `Gold_LogRet(d)` is correlated with the ounce return at `d` (shift 0) and at `d+1` (shift +1):
+
+| Period | n | shift 0 | shift +1 |
+|---|---|---|---|
+| pre-block (…2023-10-26) | 287 | +0.1064 | +0.2068 |
+| **block 2023-10-27 → 2025-08-06** | **150** | **+0.1833** | **+0.3722** |
+| post-block (2025-08-07…) | 114 | **+0.4126** | −0.0990 |
+
+This reproduces the shape of the Stage 1b result on local data: inside the block the +1 relabel lifts the same-day correlation to roughly the clean post-block level, and the same operation destroys the post-block. The pre-block period is weak at both shifts and does not discriminate.
+
+Two honest caveats:
+
+- The local test is **not** the decisive one. It reconstructs Yahoo bars from a forward-filled column and therefore has fewer rows (150 vs 235 in Stage 1b) and a different weekday mix. The decisive numbers remain Stage 1b's identical-row-set test on actual `GC=F` bars: **+0.1119 → +0.3803** in the block, **+0.3577 → −0.1262** post-block.
+- After the correction, a block row carries the date of the ounce bar it was previously mismatched with, so the block's same-day correlation in the corrected frame *is* the raw shift+1 value (+0.3722) by construction. It is not an independent measurement; the independent one is above.
+
+## Reproduce
+
+```bash
+.venv/bin/python - <<'PY'
+import pandas as pd
+from src.data_loader import apply_block_date_shift
+from config.settings import config
+raw = pd.read_csv('data/raw/final_gold_dataset.csv', index_col='Date',
+                  parse_dates=True).sort_index().reset_index()
+out, n = apply_block_date_shift(
+    raw, config.data.DATE_SHIFT_WINDOW_START, config.data.DATE_SHIFT_WINDOW_END,
+    config.data.DATE_SHIFT_DAYS, config.data.DATE_SHIFT_ENABLED)
+print(n, len(out), out['Date'].duplicated().sum())
+print(pd.to_datetime(out['Date']).dt.day_name().value_counts())
+PY
+```
+
+Unit tests: `tests/test_data_loader_date_shift.py` (window boundaries, exact rows, flag off, row count, uniqueness, collision refusal). Raw data is never modified, so the transform is reversible by setting `DATE_SHIFT_ENABLED = False`.

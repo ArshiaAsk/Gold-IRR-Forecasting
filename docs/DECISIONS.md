@@ -223,11 +223,34 @@ Resolve the 2023-10-27 → 2025-08-06 block before choosing between fixing it an
 
 ---
 
+## D19 — G1-final: apply the +1 relabel as a reversible loader transform
+
+**Date:** 2026-11-14 · **Status:** accepted · **Executed in Stage 2a**
+
+The 2023-10-27 → 2025-08-06 block is corrected at load time. Rows whose date falls in the window are relabelled **+1 day**, per Iranian series, before the gold/USD merge. The window and an enable flag live in `config/settings.py`; the transform is logged on every run; no raw data file is edited. Setting `DATE_SHIFT_ENABLED = False` restores the raw behaviour exactly.
+
+**Rationale (owner's G1-final call).**
+
+- **The Jalali field cannot witness the defect.** TGJU emits `Date_G` and `Date_J` from a single record, so both are one day early together and the offset stays 0 in all 11,331 records. Its silence is uninformative, not exculpatory — it was never a second witness.
+- **The alignment test is the independent evidence.** On an identical row set, the block's same-day correlation with `GC=F` goes **+0.1119 → +0.3803** under +1, matching the clean post-block level **+0.3577**; the same shift destroys the clean period (**+0.3577 → −0.1262**). A transform that restores the block to the clean level and ruins the clean period is measuring alignment and nothing else.
+- **The block's Friday rows carry the weekend move** (median |return| 1.179%, zero-change share 0.00). A market closed on Friday cannot produce a Friday row with a return; a one-day-early label can.
+
+**Consequences.**
+
+- The residual risk is unchanged and is recorded: the mechanism is inferred from alignment, not observed at the source (no external archive of an individual date inside the block).
+- **Stage 3 evaluates three variants** — raw, corrected, block excluded — as a sensitivity analysis, on identical folds. **The README must report all three**, not just the corrected one.
+- The correction is a constant in one function. Reversing it is a config flag, not a data migration.
+- Stage 1b's recommendation was (b) document-only. This decision overrides the recommendation, not the evidence; the evidence supports (a) as a defensible engineering call (see "Stage 1b" B3/B5).
+
+---
+
 ## Open decisions
 
 These are the owner's calls. Each names the stage it blocks.
 
-### G1-final — Apply the +1 relabel, or document only? *(blocks Stage 2 onward)*
+### G1-final — RESOLVED in Stage 2a → **D19 (apply the relabel)** *(was: apply or document?)*
+
+**Resolved 2026-11-14: option (a), applied as a reversible loader transform.** The text below is the state at GATE 1 and is kept for the record; it is superseded by D19.
 
 Stage 1b is complete. The evidence now separates cleanly into two halves:
 
