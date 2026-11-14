@@ -60,6 +60,8 @@ data/processed/
 # Logs
 logs/
 *.log
+# The Stage 3 run log is a committed result artifact
+!results/run.log
 
 # Generated outputs and caches
 outputs/

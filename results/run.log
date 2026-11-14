@@ -1,0 +1,87 @@
+2026-11-14 18:03:57,480 | INFO | Stage 3 evaluation start; git=8d7715e; args={'variant': 'all', 'seeds': 5, 'legacy_seeds': 3, 'epochs': 60, 'skip_legacy': False, 'artifact': True}
+2026-11-14 18:03:57,493 | INFO | Raw prices: 1424 rows 2021-06-14..2026-06-13; global series: 1265 rows 2021-06-04..2026-06-12
+2026-11-14 18:03:57,493 | INFO | ========================================================================
+2026-11-14 18:03:57,493 | INFO | Variant V1
+2026-11-14 18:03:57,496 | INFO | V1 prices: 1424 rows, 2021-06-14..2026-06-13, relabelled=0
+2026-11-14 18:03:57,509 | INFO | V1 stationary frame: 1364 rows; pre=1154 holdout=210 (2025-10-01..2026-06-11); folds=5
+2026-11-14 18:03:57,509 | INFO |   fold 1: train 2021-08-28..2023-08-07 (547), test 2023-09-21..2024-02-03 (111)
+2026-11-14 18:03:57,509 | INFO |   fold 2: train 2021-08-28..2023-12-29 (663), test 2024-02-12..2024-07-07 (111)
+2026-11-14 18:03:57,509 | INFO |   fold 3: train 2021-08-28..2024-05-28 (779), test 2024-07-16..2024-11-27 (110)
+2026-11-14 18:03:57,509 | INFO |   fold 4: train 2021-08-28..2024-10-23 (894), test 2024-12-06..2025-04-26 (110)
+2026-11-14 18:03:57,509 | INFO |   fold 5: train 2021-08-28..2025-03-11 (1009), test 2025-05-03..2025-09-30 (110)
+2026-11-14 18:04:42,271 | INFO |   fold 1 done (fit=435 val=82 test=111)
+2026-11-14 18:05:25,881 | INFO |   fold 2 done (fit=534 val=99 test=111)
+2026-11-14 18:06:14,153 | INFO |   fold 3 done (fit=633 val=116 test=110)
+2026-11-14 18:07:21,490 | INFO |   fold 4 done (fit=730 val=134 test=110)
+2026-11-14 18:08:33,430 | INFO |   fold 5 done (fit=828 val=151 test=110)
+2026-11-14 18:08:33,530 | INFO |   WF persistence      n= 552 rmse=0.018350 r2=+0.0000 dm_p=nan dir=0.0091
+2026-11-14 18:08:33,627 | INFO |   WF histmean         n= 552 rmse=0.018188 r2=+0.0175 dm_p=0.0055 dir=0.5634
+2026-11-14 18:08:33,726 | INFO |   WF ridge_own        n= 552 rmse=0.018299 r2=+0.0056 dm_p=0.3264 dir=0.5688
+2026-11-14 18:08:33,824 | INFO |   WF ridge_full       n= 552 rmse=0.018839 r2=-0.0540 dm_p=0.8671 dir=0.5562
+2026-11-14 18:08:33,922 | INFO |   WF lstm_stationary  n= 552 rmse=0.018258 r2=+0.0100 dm_p=0.3287 dir=0.5489
+2026-11-14 18:09:54,675 | INFO |   HO persistence      n= 210 rmse=0.026545 r2=+0.0000 dm_p=nan dir=0.0238
+2026-11-14 18:09:54,763 | INFO |   HO histmean         n= 210 rmse=0.026457 r2=+0.0066 dm_p=0.2428 dir=0.5143
+2026-11-14 18:09:54,863 | INFO |   HO ridge_own        n= 210 rmse=0.026704 r2=-0.0120 dm_p=0.7966 dir=0.5000
+2026-11-14 18:09:54,947 | INFO |   HO ridge_full       n= 210 rmse=0.026764 r2=-0.0166 dm_p=0.6747 dir=0.4619
+2026-11-14 18:09:55,032 | INFO |   HO lstm_stationary  n= 210 rmse=0.026575 r2=-0.0023 dm_p=0.5283 dir=0.5286
+2026-11-14 18:09:55,037 | INFO | Variant V1 finished in 357.5 s
+2026-11-14 18:09:55,039 | INFO | Wrote /home/arshiaask/projects/Gold_Usd_Oil_IRR/results/eval_V1.json
+2026-11-14 18:09:55,040 | INFO | ========================================================================
+2026-11-14 18:09:55,040 | INFO | Variant V2
+2026-11-14 18:09:55,047 | INFO | V2 prices: 1424 rows, 2021-06-14..2026-06-13, relabelled=503
+2026-11-14 18:09:55,060 | INFO | V2 stationary frame: 1364 rows; pre=1154 holdout=210 (2025-10-01..2026-06-11); folds=5
+2026-11-14 18:09:55,060 | INFO |   fold 1: train 2021-08-28..2023-08-07 (547), test 2023-09-21..2024-02-04 (111)
+2026-11-14 18:09:55,060 | INFO |   fold 2: train 2021-08-28..2023-12-30 (663), test 2024-02-13..2024-07-08 (111)
+2026-11-14 18:09:55,060 | INFO |   fold 3: train 2021-08-28..2024-05-29 (779), test 2024-07-17..2024-11-28 (110)
+2026-11-14 18:09:55,060 | INFO |   fold 4: train 2021-08-28..2024-10-24 (894), test 2024-12-07..2025-04-27 (110)
+2026-11-14 18:09:55,060 | INFO |   fold 5: train 2021-08-28..2025-03-12 (1009), test 2025-05-04..2025-09-30 (110)
+2026-11-14 18:09:55,072 | INFO | V2 legacy frame: 1394 rows (old 15 raw-level features)
+2026-11-14 18:11:06,806 | INFO |   fold 1 done (fit=435 val=82 test=111)
+2026-11-14 18:12:22,341 | INFO |   fold 2 done (fit=534 val=99 test=111)
+2026-11-14 18:13:49,965 | INFO |   fold 3 done (fit=633 val=116 test=110)
+2026-11-14 18:15:49,664 | INFO |   fold 4 done (fit=730 val=134 test=110)
+2026-11-14 18:17:37,398 | INFO |   fold 5 done (fit=828 val=151 test=110)
+2026-11-14 18:17:37,516 | INFO |   WF persistence      n= 552 rmse=0.018350 r2=+0.0000 dm_p=nan dir=0.0091
+2026-11-14 18:17:37,613 | INFO |   WF histmean         n= 552 rmse=0.018188 r2=+0.0175 dm_p=0.0055 dir=0.5634
+2026-11-14 18:17:37,715 | INFO |   WF ridge_own        n= 552 rmse=0.018299 r2=+0.0056 dm_p=0.3264 dir=0.5688
+2026-11-14 18:17:37,815 | INFO |   WF ridge_full       n= 552 rmse=0.018846 r2=-0.0548 dm_p=0.8595 dir=0.5598
+2026-11-14 18:17:37,911 | INFO |   WF lstm_stationary  n= 552 rmse=0.018214 r2=+0.0148 dm_p=0.2251 dir=0.5616
+2026-11-14 18:17:38,010 | INFO |   WF lstm_legacy      n= 552 rmse=0.018243 r2=+0.0116 dm_p=0.1337 dir=0.5489
+2026-11-14 18:20:06,718 | INFO |   HO persistence      n= 210 rmse=0.026545 r2=+0.0000 dm_p=nan dir=0.0238
+2026-11-14 18:20:06,804 | INFO |   HO histmean         n= 210 rmse=0.026457 r2=+0.0066 dm_p=0.2428 dir=0.5143
+2026-11-14 18:20:06,896 | INFO |   HO ridge_own        n= 210 rmse=0.026704 r2=-0.0120 dm_p=0.7966 dir=0.5000
+2026-11-14 18:20:06,977 | INFO |   HO ridge_full       n= 210 rmse=0.026798 r2=-0.0192 dm_p=0.7018 dir=0.4571
+2026-11-14 18:20:07,057 | INFO |   HO lstm_stationary  n= 210 rmse=0.026543 r2=+0.0001 dm_p=0.4984 dir=0.5143
+2026-11-14 18:20:07,138 | INFO |   HO lstm_legacy      n= 210 rmse=0.026631 r2=-0.0065 dm_p=0.7153 dir=0.4762
+2026-11-14 18:20:07,163 | INFO | Variant V2 finished in 612.1 s
+2026-11-14 18:20:07,169 | INFO | Wrote /home/arshiaask/projects/Gold_Usd_Oil_IRR/results/eval_V2.json
+2026-11-14 18:20:07,169 | INFO | ========================================================================
+2026-11-14 18:20:07,169 | INFO | Variant V3
+2026-11-14 18:20:07,174 | INFO | V3 prices: 1424 rows, 2021-06-14..2026-06-13, relabelled=0
+2026-11-14 18:20:07,206 | INFO | V3 stationary frame: 860 rows; pre=650 holdout=210 (2025-10-01..2026-06-11); folds=5
+2026-11-14 18:20:07,206 | INFO |   fold 1: train 2021-08-28..2022-09-04 (295), test 2022-10-20..2022-12-31 (60)
+2026-11-14 18:20:07,206 | INFO |   fold 2: train 2021-08-28..2022-11-23 (360), test 2023-01-07..2023-04-10 (60)
+2026-11-14 18:20:07,206 | INFO |   fold 3: train 2021-08-28..2023-02-21 (425), test 2023-04-18..2023-07-04 (60)
+2026-11-14 18:20:07,206 | INFO |   fold 4: train 2021-08-28..2023-05-27 (490), test 2023-07-11..2023-09-25 (60)
+2026-11-14 18:20:07,207 | INFO |   fold 5: train 2021-08-28..2023-08-16 (555), test 2023-10-02..2025-09-30 (60)
+2026-11-14 18:20:42,078 | INFO |   fold 1 done (fit=221 val=44 test=60)
+2026-11-14 18:21:23,089 | INFO |   fold 2 done (fit=276 val=54 test=60)
+2026-11-14 18:22:05,906 | INFO |   fold 3 done (fit=332 val=63 test=60)
+2026-11-14 18:22:56,123 | INFO |   fold 4 done (fit=387 val=73 test=60)
+2026-11-14 18:23:44,903 | INFO |   fold 5 done (fit=442 val=83 test=60)
+2026-11-14 18:23:44,993 | INFO |   WF persistence      n= 300 rmse=0.021282 r2=+0.0000 dm_p=nan dir=0.1100
+2026-11-14 18:23:45,081 | INFO |   WF histmean         n= 300 rmse=0.021216 r2=+0.0062 dm_p=0.1419 dir=0.4833
+2026-11-14 18:23:45,167 | INFO |   WF ridge_own        n= 300 rmse=0.021249 r2=+0.0031 dm_p=0.4168 dir=0.4267
+2026-11-14 18:23:45,255 | INFO |   WF ridge_full       n= 300 rmse=0.023846 r2=-0.2555 dm_p=0.9716 dir=0.4467
+2026-11-14 18:23:45,344 | INFO |   WF lstm_stationary  n= 271 rmse=0.021475 r2=+0.0061 dm_p=0.3012 dir=0.4059
+2026-11-14 18:24:40,737 | INFO |   HO persistence      n= 210 rmse=0.026545 r2=+0.0000 dm_p=nan dir=0.0238
+2026-11-14 18:24:40,820 | INFO |   HO histmean         n= 210 rmse=0.026460 r2=+0.0064 dm_p=0.2250 dir=0.5143
+2026-11-14 18:24:40,904 | INFO |   HO ridge_own        n= 210 rmse=0.026829 r2=-0.0215 dm_p=0.8567 dir=0.5095
+2026-11-14 18:24:40,988 | INFO |   HO ridge_full       n= 210 rmse=0.027296 r2=-0.0574 dm_p=0.8426 dir=0.4810
+2026-11-14 18:24:41,073 | INFO |   HO lstm_stationary  n= 210 rmse=0.026676 r2=-0.0099 dm_p=0.6357 dir=0.5476
+2026-11-14 18:24:41,092 | INFO | Variant V3 finished in 273.9 s
+2026-11-14 18:24:41,097 | INFO | Wrote /home/arshiaask/projects/Gold_Usd_Oil_IRR/results/eval_V3.json
+2026-11-14 18:24:41,128 | INFO | Wrote /home/arshiaask/projects/Gold_Usd_Oil_IRR/results/eval_summary.csv (32 rows)
+2026-11-14 18:24:41,192 | INFO | Artifact: training on 2021-08-28..2024-12-31 (fit=951, val=173), holdout starts 2025-10-01
+2026-11-14 18:24:57,094 | INFO | Artifact saved: /home/arshiaask/projects/Gold_Usd_Oil_IRR/models/gold_lstm_stationary_v2.keras + scalers + /home/arshiaask/projects/Gold_Usd_Oil_IRR/models/gold_lstm_stationary_v2.metadata.json
+2026-11-14 18:24:57,094 | INFO | Stage 3 evaluation complete in 1259.6 s
