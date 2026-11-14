@@ -34,50 +34,50 @@ env/
 *.swo
 *~
 
-# ML artifacts
+# ML artifacts (scalers are regenerated in Stage 3 and committed with the model)
 *.pkl
 *.joblib
 *.h5
 *.onnx
-mlruns/
 
-# Data
-data/*.db
-data/*.sqlite
-*.csv
-*.parquet
+# Experiment tracking
+mlruns/
+mlflow/
 mlflow.db
+*.db
+*.sqlite
+
+# Data: not redistributed (decision D14). The small sample is the exception.
+data/raw/
+data/processed/
+!data/sample/
+!data/sample/*.csv
+*.parquet
 
 # Logs
 logs/
 *.log
 
-# Docker
-.dockerignore
+# Generated outputs and caches
+outputs/
+trading_bot/outputs/
+catboost_info/
+.cache/
+.pytest_cache/
+.coverage
+
+# Plots
+*.png
+*.jpg
+*.jpeg
+*.svg
 
 # OS
 .DS_Store
 Thumbs.db
 
-# MLflow
-mlflow/
-
 # Temporary files
 *.tmp
-.cache/
 
-# HTML coverage reports
-.coverage
-
-# Jupyter notebooks
+# Jupyter
 .ipynb_checkpoints/
-
-# pytest
-.pytest_cache/
-
-# Plots / Output
-outputs/
-*.png
-*.jpg
-*.jpeg
-*.svg
