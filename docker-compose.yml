@@ -1,26 +1,17 @@
-# Optional: Docker Compose for local development/testing
-# Note: Hugging Face Spaces will use the Dockerfile directly
+# Single service. Streamlit is not part of this image (decision D17).
 version: '3.8'
 
 services:
-  ml-stack:
+  api:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "7860:7860"  # Streamlit UI
-      - "8000:8000"  # FastAPI (for local testing)
-      - "5000:5000"  # MLflow (for local testing)
-      - "9100:9100"  # Prometheus (for local testing)
-    volumes:
-      - ./data:/data
-      - ./mlflow:/mlflow
-      - ./logs:/logs
+      - "8000:8000"
     environment:
-      - MLFLOW_TRACKING_URI=http://localhost:5000
-      - FASTAPI_URL=http://localhost:8000
+      - API_KEY_REQUIRED=false
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/_stcore/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

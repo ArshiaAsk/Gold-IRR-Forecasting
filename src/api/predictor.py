@@ -155,55 +155,6 @@ class GoldPricePredictor:
             'predicted_log_return': float(log_return),
             'prediction_timestamp': datetime.now().isoformat()
         }  
-    
-
-    def predict_with_confidence(
-        self,
-        features: np.ndarray,
-        current_price: float,
-        n_simulations: int 
-    ) -> Dict [str, float]:
-        """
-        Predict with Monte Carlo confidence intervals
-        (This is a simplified simulation based on model uncertainty if using Dropout, 
-         or just repeating prediction if model is deterministic)
-        
-        Args:
-            features: Feature array
-            current_price: Current price
-            n_simulations: Number of MC simulations
-            
-        Returns:
-            Prediction with confidence intervals
-        """
-        predictions = []
-        
-        # Note: Standard Keras models are deterministic during inference unless 
-        # training=True is passed or MCDropout is used. 
-        # For now, we will simulate uncertainty or use the single prediction.
-        
-        # Ideally, you would run this in a loop with training=True to get variance
-        # specific_prediction = self.predict_price(features, current_price)
-        
-        # Placeholder for actual MC Dropout logic:
-        base_pred = self.predict_price(features, current_price)['predicted_price']
-        
-        # Adding artificial noise for demonstration (Replace with real MC Dropout later)
-        # This assumes a small standard deviation error
-        noise = np.random.normal(0, base_pred * 0.005, n_simulations) 
-        predictions = base_pred + noise
-
-        return {
-            'current_price': float(current_price),
-            'predicted_price': float(np.mean(predictions)),
-            'confidence_interval_95': {
-                'lower': float(np.percentile(predictions, 2.5)),
-                'upper': float(np.percentile(predictions, 97.5))
-            },
-            'std_dev': float(np.std(predictions)),
-            'prediction_timestamp': datetime.now().isoformat()
-        }
-    
 
 
 class FeatureBuilder:
