@@ -163,11 +163,15 @@ post-block data before the hold-out. This limitation is reported. In addition:
 
 ### 5.1 Hold-out
 
-The final **180 rows** of each variant's stationary feature frame are held out and touched
-**once**, at the end, after every walk-forward number is written. For V1/V2 this begins in
-2025-10; for V3 it is the final 180 rows of the remaining post-block frame. The exact start
-date is reported per variant. No scaler, fold boundary, early-stopping epoch or model choice
-uses hold-out rows.
+The final hold-out is **all rows dated 2025-10-01 or later** — 210 rows in this snapshot,
+which is the requested "~180 rows, 2025-10 onward" (the old test split was 2025-10-02 →
+2026-06-11, 209 rows). It is touched **once**, at the end, after every walk-forward number is
+written. For V3 the block is absent and the same date cutoff is used. No scaler, fold boundary,
+early-stopping epoch or model choice uses hold-out rows.
+
+*Pre-run amendment 1 (before any model fit, 2026-11-14): the first draft said "the final 180
+rows". A data-shape check showed those begin 2025-11-05, which would skip October. The
+2025-10-01 cutoff matches the requested period and gives 210 rows; it is used from here on.*
 
 ### 5.2 Walk-forward
 
