@@ -402,12 +402,18 @@ prediction at daily frequency**, not a claim that gold/USD/oil information is ne
 - **Global series vintage.** The protocol §2.3 fixed the use of one complete Yahoo pull for all
   variants because the CSV lacks 110 corrected-date global bars. This is a data-construction
   decision, not a post-hoc deviation.
+- **Optional same-day global sensitivity was not run.** The protocol allowed it as a labelled
+  sensitivity only; it is not part of the headline, and the one-day global lag is the
+  pre-registered primary spec. Its absence does not affect the edge verdict.
 
 ---
 
 ## 9. Reproduce
 
 ```bash
+# Single variant (the entry point requested by the Stage 3 instruction)
+.venv/bin/python -m src.evaluate --variant V2
+
 # Full protocol (writes results/ and the primary artifact)
 .venv/bin/python -m src.evaluate --variant all --artifact
 
