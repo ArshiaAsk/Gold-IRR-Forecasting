@@ -22,6 +22,7 @@ wheels/
 
 # Virtual environments
 venv/
+.venv/
 ENV/
 env/
 .env
@@ -67,9 +68,6 @@ mlflow/
 
 # HTML coverage reports
 .coverage
-
-# Docs
-docs/*
 
 # Jupyter notebooks
 .ipynb_checkpoints/
