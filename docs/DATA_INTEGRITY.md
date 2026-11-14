@@ -409,6 +409,8 @@ The block is **entirely inside train and validation. The test split contains non
 
 (The same 503 rows are 35.3% of the raw merged frame's 1,424 rows; the difference is the 30 rows dropped by the rolling-window warm-up.)
 
+**503 vs 502:** each TGJU series has **502** rows in the window; the merged frame has **503** because the two series' window date sets differ by one date each (gold-only `2025-04-02`, USD-only `2025-06-24`) and the union is 503 — a merge-union effect, not boundary inclusivity; all 503 merged rows lie inside the same block and are relabelled together, so no conclusion changes (verified against a live TGJU fetch, 2026-11-14).
+
 ---
 
 ## 8. Forward fill
