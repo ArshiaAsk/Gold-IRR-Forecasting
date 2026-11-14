@@ -25,8 +25,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Try to import local modules, fallback to API-only mode
 try:
     from src.api.predictor import GoldPricePredictor, FeatureBuilder
-    from api_layer.live_predictor import LivePredictor
-    from api_layer.live_feature_engineering import LiveFeatureEngineer
     LOCAL_MODE = True
 except Exception as e:
     logger.warning(f"Local imports failed: {e}. Using API mode only.")
