@@ -1,0 +1,57 @@
+{
+  "stage": "3",
+  "artifact": "models/gold_lstm_stationary_v2.keras",
+  "scalers": [
+    "models/scaler_X_stationary_v2.pkl",
+    "models/scaler_y_stationary_v2.pkl"
+  ],
+  "variant": "V2",
+  "feature_spec": "stationary",
+  "feature_columns": [
+    "gold_ret_lag1",
+    "gold_ret_lag2",
+    "gold_ret_lag3",
+    "gold_ret_lag5",
+    "usd_ret_lag0",
+    "usd_ret_lag1",
+    "usd_ret_lag2",
+    "usd_ret_lag5",
+    "ounce_ret_lag1",
+    "ounce_ret_lag2",
+    "ounce_ret_lag5",
+    "oil_ret_lag1",
+    "oil_ret_lag5",
+    "rsi_14",
+    "macd_norm",
+    "macd_signal_norm",
+    "bb_pctb_20",
+    "bb_bandwidth_20",
+    "price_sma_7",
+    "price_sma_20",
+    "price_sma_60",
+    "rv_5",
+    "rv_20"
+  ],
+  "sequence_length": 30,
+  "architecture": "LSTM(64)-LSTM(32)-Dense(16)-Dense(1)",
+  "training_window": [
+    "2021-08-28",
+    "2024-12-31"
+  ],
+  "validation_window": [
+    "2025-02-08",
+    "2025-09-30"
+  ],
+  "pre_holdout_window": [
+    "2021-08-28",
+    "2025-09-30"
+  ],
+  "holdout_window": [
+    "2025-10-01",
+    "2026-06-11"
+  ],
+  "seed": 42,
+  "git_commit": "8d7715e",
+  "date_utc": "2026-11-14T14:54:57+00:00",
+  "note": "Not wired into the API or Streamlit in Stage 3."
+}

@@ -39,6 +39,9 @@ env/
 *.joblib
 *.h5
 *.onnx
+# Stage 3 primary artifact: model and its two scalers are committed together
+!models/scaler_X_stationary_v2.pkl
+!models/scaler_y_stationary_v2.pkl
 
 # Experiment tracking
 mlruns/
