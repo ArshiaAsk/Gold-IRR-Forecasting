@@ -8,6 +8,96 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import config
 from src.utils import logger
 
+# Frozen Stage 3 feature set (docs/EVAL_PROTOCOL.md §3). Every entry is
+# stationary or dimensionless; no raw price level is present.
+STATIONARY_FEATURE_COLUMNS = [
+    'gold_ret_lag1', 'gold_ret_lag2', 'gold_ret_lag3', 'gold_ret_lag5',
+    'usd_ret_lag0', 'usd_ret_lag1', 'usd_ret_lag2', 'usd_ret_lag5',
+    'ounce_ret_lag1', 'ounce_ret_lag2', 'ounce_ret_lag5',
+    'oil_ret_lag1', 'oil_ret_lag5',
+    'rsi_14', 'macd_norm', 'macd_signal_norm',
+    'bb_pctb_20', 'bb_bandwidth_20',
+    'price_sma_7', 'price_sma_20', 'price_sma_60',
+    'rv_5', 'rv_20',
+]
+
+
+def add_stationary_features(df):
+    """
+    Compute the frozen Stage 3 stationary feature set.
+
+    This is the single source of truth for both training and serving. It is a
+    pure function of the rows up to and including each row's date: every
+    rolling window, EMA and lag is causal, and no column is a raw price level.
+
+    Args:
+        df: Frame indexed by date with columns Gold_IRR, USD_IRR, Ounce_USD,
+            Oil_USD, sorted ascending.
+
+    Returns:
+        DataFrame with exactly ``STATIONARY_FEATURE_COLUMNS``; rows with an
+        insufficient warm-up contain NaN and are dropped by the caller.
+    """
+    required = ['Gold_IRR', 'USD_IRR', 'Ounce_USD', 'Oil_USD']
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"add_stationary_features missing columns: {missing}")
+
+    gold = df['Gold_IRR'].astype(float)
+    usd = df['USD_IRR'].astype(float)
+    ounce = df['Ounce_USD'].astype(float)
+    oil = df['Oil_USD'].astype(float)
+
+    gold_ret = np.log(gold).diff()
+    usd_ret = np.log(usd).diff()
+    ounce_ret = np.log(ounce).diff()
+    oil_ret = np.log(oil).diff()
+
+    out = pd.DataFrame(index=df.index)
+    # Own and USD returns: row t is the return at the prediction close.
+    out['gold_ret_lag1'] = gold_ret
+    out['gold_ret_lag2'] = gold_ret.shift(1)
+    out['gold_ret_lag3'] = gold_ret.shift(2)
+    out['gold_ret_lag5'] = gold_ret.shift(4)
+    out['usd_ret_lag0'] = usd_ret
+    out['usd_ret_lag1'] = usd_ret.shift(1)
+    out['usd_ret_lag2'] = usd_ret.shift(2)
+    out['usd_ret_lag5'] = usd_ret.shift(4)
+    # Global bars: the bar dated t is not complete at the Iranian close of t,
+    # so the last usable bar is t-1 (docs/EVAL_PROTOCOL.md §2.1).
+    out['ounce_ret_lag1'] = ounce_ret.shift(1)
+    out['ounce_ret_lag2'] = ounce_ret.shift(2)
+    out['ounce_ret_lag5'] = ounce_ret.shift(4)
+    out['oil_ret_lag1'] = oil_ret.shift(1)
+    out['oil_ret_lag5'] = oil_ret.shift(4)
+
+    # Technical indicators, all price-normalised or bounded.
+    out['rsi_14'] = FeatureEngineer.calculate_rsi(gold, period=14)
+    ema12 = gold.ewm(span=12, adjust=False).mean()
+    ema26 = gold.ewm(span=26, adjust=False).mean()
+    macd = ema12 - ema26
+    macd_signal = macd.ewm(span=9, adjust=False).mean()
+    out['macd_norm'] = macd / gold
+    out['macd_signal_norm'] = macd_signal / gold
+
+    sma20 = gold.rolling(window=20).mean()
+    sd20 = gold.rolling(window=20).std()
+    upper = sma20 + 2 * sd20
+    lower = sma20 - 2 * sd20
+    width = upper - lower
+    out['bb_pctb_20'] = (gold - lower) / width
+    out['bb_bandwidth_20'] = width / sma20
+
+    out['price_sma_7'] = gold / gold.rolling(window=7).mean() - 1
+    out['price_sma_20'] = gold / sma20 - 1
+    out['price_sma_60'] = gold / gold.rolling(window=60).mean() - 1
+
+    out['rv_5'] = gold_ret.rolling(window=5).std()
+    out['rv_20'] = gold_ret.rolling(window=20).std()
+
+    return out[STATIONARY_FEATURE_COLUMNS]
+
+
 class FeatureEngineer:
     def __init__(self):
         """
