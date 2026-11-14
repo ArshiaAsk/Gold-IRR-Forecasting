@@ -1,7 +1,21 @@
 # Refactor Plan — Honest Portfolio Piece (B-lite)
 
-**Status:** Stage 0 complete · **Branch:** `refactor/honest-portfolio` · **Baseline tag:** `legacy-pre-refactor` (→ `d1670cc`)
+**Status:** Stages 0–2b complete · **Branch:** `refactor/honest-portfolio` · **Baseline tag:** `legacy-pre-refactor` (→ `d1670cc`)
 **Source of truth for the "before" state:** `docs/AUDIT_REPORT.md` (2026-11-13, read-only audit of `d1670cc`)
+
+## Stage log
+
+| Stage | Status | Commits | Note |
+|---|---|---|---|
+| 0 | done | `d061bd7`, `61d130a` | plan, decisions, state, audit committed |
+| 1 | done | `14dec06` | data-integrity investigation, read-only |
+| 1b | done | `6edf09f` | G1 resolution: Jalali field silent, alignment verified |
+| G1-final | done | — | **D19: apply the +1 relabel** (owner) |
+| 2a | done | `d5b8dcd`, `75c927e` | reversible date correction + tests + verification |
+| 2b | done | `147d58b`, `5c6a74a`, `66b2353` | scope reduction, minimal API, repo hygiene |
+| 3 | next | — | honest modeling + three-variant sensitivity analysis |
+| 4 | pending | — | backtest or no-edge analysis |
+| 5 | pending | — | reproducibility + docs |
 
 ---
 
@@ -58,6 +72,15 @@ Additionally: every number printed in `docs/DATA_INTEGRITY.md` appears verbatim 
 ### GATE 1
 **Owner decides whether the data is fixed before any modeling work.** Options: (a) fix dates and re-derive everything, (b) keep the data as-is and document the defect as a known limitation, (c) stop and re-source the data. No Stage 2 work starts until this is answered.
 
+### Executed — Stage 1 (`14dec06`) and 1b (`6edf09f`)
+- [x] Date path traced with line numbers; H1–H5 tested; H1/H2/H3/H5 refuted, H4 refuted as cause but a separate merge defect verified.
+- [x] The audit's weekday table shown to be mislabelled (off-by-one label list).
+- [x] A 21-month block (2023-10-27 → 2025-08-06) discovered, present in both TGJU series.
+- [x] Jalali field tested: 11,331 records, 0 offsets — it cannot witness the block.
+- [x] Alignment against `GC=F`: block +0.1119 → +0.3803 under +1; post-block +0.3577 → −0.1262.
+- [x] **GATE 1 answered → D19: apply the relabel** (reversible, loader-level).
+- Deviation: `scripts/audit_calendar.py` was not committed (D9); every figure is reproduced by an inlined command in `docs/DATA_INTEGRITY.md`.
+
 ---
 
 ## Stage 2 — Scope reduction
@@ -67,36 +90,35 @@ Additionally: every number printed in `docs/DATA_INTEGRITY.md` appears verbatim 
 ### Keep
 - `src/data_loader.py`, `src/feature_eng.py`, `src/data_preprocessor.py`, `src/model_builder.py`, `src/model_evaluator.py`, `src/train_pipeline.py`
 - A minimal API: `/health`, `/model-info`, `/predict` (rewritten on top of `src/api/`)
-- `config/`, tests that actually run
+- `config/`, `streamlit_app.py`, `Dockerfile`, `trading_bot/` (kept until Stage 4), `notebooks/`, tests that actually run
 
-### Quarantine or delete (preserved in `legacy-pre-refactor`)
+### Delete (preserved in `legacy-pre-refactor`)
 - `api_layer/` live trading bot (scale bug at `api_layer/live_predictor.py:257`, stale-history corruption, Open-vs-Close mismatch)
-- `trading_bot/` backtest engine (does not use the model: `USE_REAL_PREDICTIONS=False`)
 - `src/mlops/` A/B, canary, governance model cards, ONNX, supervisor, registry, retraining gates
 - `/predict-with-confidence` (fabricated Gaussian noise, `src/api/predictor.py:193`)
-- `streamlit_app.py`, `supervisord.conf`, `monitoring/` Grafana provisioning
-- Committed junk: `notebooks/catboost_info/`, `api_layer/cache/raw_response_*.json`, `outputs/*.png`, `models/gold_lstm_v2.keras` if retraining supersedes it
+- `supervisord.conf`, `start.sh`, `quick-start.sh`, `monitoring/` Grafana provisioning
+- Committed junk: `notebooks/catboost_info/`, `api_layer/cache/raw_response_*.json`, `outputs/*.png`
 
 ### Checklist
-- [ ] Decide quarantine folder (`legacy/`) vs deletion, per component; record the rationale in `docs/DECISIONS.md`.
-- [ ] Remove the components; confirm each is still reachable at `legacy-pre-refactor`.
-- [ ] Rewrite `requirements.txt` from the actual imports of the *kept* code. Verified missing today: `yfinance`, `curl_cffi`, `pytest`, `requests` (present only as a commented line), `python-dotenv` (imported nowhere).
-- [ ] Track `models/scaler_X.pkl` and `models/scaler_y.pkl` (currently on disk, untracked, and `.gitignore` has `*.pkl`) — or make training deterministically reproduce them and say which.
-- [ ] Add `scripts/check_deps.py`: every third-party import in non-`legacy/` code is declared in `requirements.txt`.
-- [ ] Add a `Makefile` with `train`, `test`, `api`, `eval` targets.
-- [ ] Untrack generated artifacts and fix `.gitignore` so tracked/ignored policy is consistent.
+- [x] No `legacy/` folder; the tag is the archive (D3).
+- [x] Remove the components; confirm each is still reachable at `legacy-pre-refactor`.
+- [x] Rewrite `requirements.txt` from the actual imports of the *kept* code.
+- [ ] Track `models/scaler_X.pkl` / `scaler_y.pkl` — **deferred to Stage 3**, which regenerates and commits model + scalers together (owner's Stage 2b instruction).
+- [ ] Add `scripts/check_deps.py` and a `Makefile` — **deferred to Stage 5**; not in the owner's Stage 2b scope.
+- [x] Untrack generated artifacts and fix `.gitignore` so tracked/ignored policy is consistent.
 
 ### Deliverables
-Slim tree; `requirements.txt` that installs; `Makefile`; `scripts/check_deps.py`; `docs/SCOPE.md` listing what was kept, moved, deleted and why.
+Slim tree; `requirements.txt` that installs; `data/sample/`; this plan updated. (`Makefile`, `scripts/check_deps.py` and `docs/SCOPE.md` were dropped from the Stage 2 scope by the owner's instruction; Stage 5 covers the Makefile and dependency checks.)
 
-### Acceptance criterion (must be runnable)
-```bash
-python scripts/check_deps.py                                  # exits 0
-git ls-files | grep -E 'catboost_info|raw_response_' ; test $? -eq 1   # no matches
-git ls-files models/ | grep -c 'scaler'                       # 2
-git cat-file -e legacy-pre-refactor:api_layer/live_predictor.py && echo preserved
-make test                                                     # exits 0
-```
+### Executed — Stage 2a (`d5b8dcd`, `75c927e`) and 2b (`147d58b`, `5c6a74a`, `66b2353`)
+- [x] Reversible +1 relabel for 2023-10-27 → 2025-08-06 in `DataLoader.get_tgju_history`, window/flag in `config/settings.py`, row count logged every run.
+- [x] Unit tests: exact rows, flag off, no collisions, row count, boundaries (`tests/test_data_loader_date_shift.py`).
+- [x] Verified on the local raw dataset: 503 rows, 0 collisions, 1,424 → 1,424 rows, features 1,424 → 1,394; numbers in `docs/DATA_INTEGRITY.md` → "Stage 2a — Applied fix".
+- [x] Deleted `api_layer/`, `src/mlops/`, `src/monitoring/`, `monitoring/`, `supervisord.conf`, `start.sh`, `quick-start.sh`, `main.py`, `setup.py`, `examples/`, stale `outputs/`, `notebooks/catboost_info/`, and the tests for removed modules. 75 paths, all reachable at `legacy-pre-refactor`.
+- [x] Minimal API: `/health`, `/model-info`, `/predict` only; starts without MLOps; API key from `API_KEY`/`API_KEY_REQUIRED`.
+- [x] Untracked `data/raw`, `data/processed`, `data/mlops_audit.db` (kept on disk); added `data/sample/gold_sample.csv` (200 rows); rebuilt `.gitignore`.
+- [x] `requirements.txt` rebuilt from actual imports; TensorFlow/Keras pins kept.
+- Deviations from the original Stage 2 text: no `legacy/` folder (D3 uses the tag), no `Makefile`, no `scripts/check_deps.py`, no `docs/SCOPE.md` — the owner's Stage 2b instruction defined the deliverable set and did not include them. Scalers are **not** committed; Stage 3 regenerates model + scalers together (recorded in `docs/STATE.md`).
 
 ---
 

@@ -244,6 +244,18 @@ The 2023-10-27 → 2025-08-06 block is corrected at load time. Rows whose date f
 
 ---
 
+## D20 — Stage 2b deletion boundary and the one kept-code dependency
+
+**Date:** 2026-11-14 · **Status:** accepted · **Executed in Stage 2b**
+
+Delete the live bot, the MLOps layer, monitoring, supervisor/startup scripts, examples, generated outputs and the tests that exercised them. Keep `trading_bot/` until Stage 4, `streamlit_app.py`, `notebooks/` (without `catboost_info/`) and the minimal API. No `legacy/` folder: the tag is the archive (D3).
+
+**Context:** before each deletion group, kept code was grepped for imports. The only kept module importing deleted code was `streamlit_app.py`, whose `try/except` imported `api_layer.live_predictor` and `api_layer.live_feature_engineering`. Its `load_predictor()` already could not construct `GoldPricePredictor()` (required arguments were never passed), so the two imports were dead weight; they were removed and the guarded import reduced to the kept `src/api/predictor.py`. `src/api/main.py` was the only kept module importing `src.mlops`, and it was rewritten. `src/monitoring/` and `monitoring/` were imported by nothing.
+
+**Consequences:** 75 tracked paths removed, all reachable at `legacy-pre-refactor`. `streamlit_app.py` still has no working local predictor path — that is a Stage 5 concern, not a regression introduced here. Model scalers remain untracked until Stage 3 regenerates them with the model.
+
+---
+
 ## Open decisions
 
 These are the owner's calls. Each names the stage it blocks.

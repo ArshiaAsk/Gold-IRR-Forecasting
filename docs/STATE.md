@@ -1,11 +1,11 @@
 # Project State
 
 **Date:** 2026-11-14
-**Stage:** 1b complete — G1 resolution step. Read-only; no source, data or model file changed. **At GATE 1-final.**
+**Stage:** Stages 0–2b complete. The data correction is applied; the repo is cut down to the kept code and a minimal API. **Stopped at the end of Stage 2b, before Stage 3.**
 **Branch:** `refactor/honest-portfolio`
 **Baseline tag:** `legacy-pre-refactor` → `d1670cc` (annotated)
 **Pre-refactor description:** `docs/AUDIT_REPORT.md` (2026-11-13)
-**Stage 1 report:** `docs/DATA_INTEGRITY.md` (this is the authoritative data-quality document; "Stage 1b" is its last section)
+**Data-quality authority:** `docs/DATA_INTEGRITY.md` (includes "Stage 1b" and "Stage 2a — Applied fix")
 
 ---
 
@@ -45,17 +45,38 @@
 - Also resolved **O6** in code: `signal_history.jsonl` has 7 records, six with `pct/log = 100.0` and only the 2026-02-08 record at 10,000.0. That value is float32 ×100 applied twice (442.9512939 vs recorded 442.9512978, relative diff 8.6e-9), and the same record's `reasoning` string says "4.43%". Not an edit — a one-off double-scaling bug.
 - Appended "Stage 1b" to `docs/DATA_INTEGRITY.md`; updated `docs/DECISIONS.md` and this file. Committed docs only.
 
+### Stage 2a — data correction applied (`d5b8dcd`, `75c927e`)
+- Recorded the owner's G1-final call as **D19**: apply the +1 relabel, as a reversible loader transform. Rationale in `docs/DECISIONS.md`: the Jalali field cannot witness the defect (TGJU emits both fields from one record), so its silence is uninformative; the alignment test is the independent evidence.
+- Added `apply_block_date_shift()` to `src/data_loader.py`, called from `DataLoader.get_tgju_history()` after date parsing and **before** the gold/USD merge. Window (`2023-10-27 → 2025-08-06`), `+1` day and an enable flag live in `config/settings.py` (`DATE_SHIFT_*`), default enabled. The number of relabelled rows is logged on every run.
+- The helper only changes the `Date` label. It copies the frame, leaves prices untouched, and raises `ValueError` on any date collision instead of silently corrupting the merge.
+- Added `tests/test_data_loader_date_shift.py` (6 tests): exact rows, flag off, row count, uniqueness, first/last day and the days around them, collision refusal.
+- Verified on `data/raw/final_gold_dataset.csv` (no network): **503 rows relabelled, 0 collisions, 1,424 → 1,424 rows, prices identical**; weekday histogram Thu 137 → 220, Fri 90 → 4; features regenerate **1,424 → 1,394** rows. Block alignment on local data: **+0.1833 → +0.3722** under +1, post-block **+0.4126 → −0.0990**. Details and caveats in `docs/DATA_INTEGRITY.md` → "Stage 2a — Applied fix".
+- `yfinance` and `curl_cffi` are now imported inside the fetch methods, so the module and its offline tests import without the network stack.
+
+### Stage 2b — scope reduction (`147d58b`, `5c6a74a`, `66b2353`)
+- Deleted **75 tracked paths**: `api_layer/`, `src/mlops/`, `src/monitoring/`, `monitoring/`, `examples/`, `example_usage.py`, `supervisord.conf`, `start.sh`, `quick-start.sh`, empty `main.py`, `setup.py`, `src/api/client_example.py`, stale `outputs/`, `notebooks/catboost_info/`, and the 7 tests that exercised removed modules. All reachable at `legacy-pre-refactor`.
+- Grepped kept code before deleting: only `streamlit_app.py` imported `api_layer` (guarded try/except) and only `src/api/main.py` imported `src.mlops` (rewritten). `src/monitoring/` and `monitoring/` were imported by nothing. The Streamlit guarded import was reduced to the kept predictor.
+- Minimal API (`src/api/main.py`): exactly `/health`, `/model-info`, `/predict`. No MLOps wiring, no Prometheus, no ONNX, no audit store. Starts even when artifacts are absent; `/health` returns 200 and reports `model_loaded`. `/predict` validates the real `(30, 15)` schema with pydantic v2. Removed `/predict-with-confidence` and the artificial Gaussian interval in `src/api/predictor.py`.
+- API auth is unchanged and environment-driven: **`API_KEY`** holds the key, **`API_KEY_REQUIRED`** (default `true`) toggles it. If auth is required and `API_KEY` is unset, protected endpoints return 503 with a clear message. Header name is `X-API-Key` (override with `API_KEY_HEADER_NAME`).
+- Docker reduced to one process (`uvicorn` on 8000); `start.sh`/`supervisord.conf` are gone. `docker-compose.yml` has a single `api` service.
+- Untracked `data/raw/final_gold_dataset.csv`, `data/processed/advanced_gold_features.csv` and `data/mlops_audit.db` (kept on disk). Added `data/sample/gold_sample.csv`, the last 200 rows (2025-10-14 → 2026-06-13), with a README noting that full redistribution awaits TGJU permission (D14/O5).
+- `.gitignore` now covers `data/raw`, `data/processed`, `*.db`, `mlruns/`, `logs/`, `outputs/`, caches, and allows `data/sample/*.csv`. The global `*.csv` rule and the self-ignoring `.dockerignore` entry were removed.
+- `requirements.txt` rebuilt from actual imports: adds `yfinance`, `curl_cffi`, `requests`, `pytest`; removes `mlflow`, `evidently`, `onnxruntime`, `tf2onnx`, `schedule`, `prometheus-*`, `aiofiles`, `psutil`. TensorFlow/Keras pins kept. Notebook-only libraries are listed as optional comments.
+- **Scalers are not committed** (`models/scaler_X.pkl`, `models/scaler_y.pkl` are untracked and ignored). **Stage 3 regenerates the model and both scalers and commits them together**, so the committed model and scalers always come from the same training run.
+
 ## Next
 
-**GATE 1-final — the owner decides between (a) applying the +1 window relabel and (b) documenting the block only.** No Stage 2 work starts until this is answered. Recommendation on the table: **(b)**, with a Stage 3 sensitivity analysis (train and evaluate with and without the 503 block rows). See `docs/DECISIONS.md` → G1-final and `docs/DATA_INTEGRITY.md` → "Stage 1b".
+**Stage 3 — honest modeling and evaluation.** Normalize the raw-level features (D16), use walk-forward validation, report persistence/ridge/LSTM side by side, and run the **three-variant sensitivity analysis required by D19: raw, corrected, block excluded**, on identical folds. The README must report all three. Regenerate and commit model + scalers together.
 
 ## Blockers
 
-| ID | Decision | Blocks |
-|---|---|---|
-| **G1-final** | **Apply the +1 relabel, or document only** | **Stage 2 onward** |
+None. G1-final is resolved by D19; O1–O8 are resolved as D10–D17.
 
-O1–O8 are resolved (D10–D17). O3 and O4 do not block Stage 2.
+## Known stale artifacts
+
+- `README.md` is still the pre-refactor document. It describes components deleted in Stage 2b, quotes metrics that contradict the artifacts, and labels Rial as Toman. **Do not quote it.** Stage 5 rewrites it; Stage 3 supplies the numbers, including the three data variants required by D19.
+- `models/gold_lstm_v2.keras` is the pre-refactor model. It is still tracked so the API has something to load, but Stage 3 replaces it and commits the new model together with its scalers.
+- `notebooks/` are kept as history. They import `catboost`, `lightgbm`, `xgboost` and `statsmodels`, which are **not** installed by `requirements.txt` (listed there as optional comments).
 
 ---
 
@@ -71,19 +92,19 @@ Everything below was produced by a command in this session. Nothing here is copi
 | `curl_cffi` is **not installed** in `.venv` | `ModuleNotFoundError`; live fetches used `urllib` instead |
 | Raw dataset has **1,424** data rows | `wc -l data/raw/final_gold_dataset.csv` → 1,425 incl. header |
 | Processed dataset has **1,394** data rows | `wc -l data/processed/advanced_gold_features.csv` → 1,395 incl. header |
-| Repository has **129** commits | `git rev-list --count HEAD` |
+| Repository had **129** commits at the start of Stage 0 (**138** at the end of Stage 2b) | `git rev-list --count HEAD` |
 | `.env` exists, is untracked, and is ignored at `.gitignore:28` | `git ls-files .env` (empty), `git check-ignore -v .env` |
 | `.github/` does not exist (no CI) | `ls -d .github` |
 | `Makefile` does not exist | `ls Makefile` |
 | `scripts/` does not exist | `ls -d scripts` |
 | `docs/` contained only `AUDIT_REPORT.md` before Stage 0 | `ls docs` |
-| `docker-compose.yml` defines exactly **one** service, `ml-stack` | `grep -n "^  [a-z]" docker-compose.yml` |
+| `docker-compose.yml` now defines exactly **one** service, `api` (was `ml-stack` before Stage 2b) | `grep -n "^  [a-z]" docker-compose.yml` |
 | Model file is tracked; both scalers are **not** | `git ls-files models/` → only `models/gold_lstm_v2.keras`; `models/scaler_X.pkl` and `scaler_y.pkl` exist on disk |
-| `logs/test_metrics.json` reports price R² 0.9716991951320707, RMSE 4,840,916.90, MAE 2,883,359.74, MAPE 1.7017, log-return RMSE 0.0275036 — and **no** log-return R² field | `cat logs/test_metrics.json` |
-| `trading_bot/outputs/backtest_metrics.json` reports −12.034% return, Sharpe −7.361, max drawdown 15.105%, 30 trades, 40% win rate, benchmark +1,184.94%, period 2021-01-27 → 2025-12-20 (1,384 days) | `cat trading_bot/outputs/backtest_metrics.json` |
-| `trading_bot/outputs/portfolio_log.csv` covers 2021-07-19 → 2026-06-11 (1,394 rows) and ends at 859,421,876.91 IRR — i.e. it does **not** match the committed metrics file's period | `head`/`tail`/`wc -l` on the CSV |
+| `logs/test_metrics.json` reports price R² 0.9716991951320707, RMSE 4,840,916.90, MAE 2,883,359.74, MAPE 1.7017, log-return RMSE 0.0275036 — and **no** log-return R² field | `cat logs/test_metrics.json` (log file still on disk; `logs/` is ignored) |
+| `trading_bot/outputs/backtest_metrics.json` reported −12.034% return, Sharpe −7.361, max drawdown 15.105%, 30 trades, 40% win rate, benchmark +1,184.94%, period 2021-01-27 → 2025-12-20 (1,384 days) | read in Stage 0; the stale `trading_bot/outputs/` was deleted in Stage 2b |
+| `trading_bot/outputs/portfolio_log.csv` covered 2021-07-19 → 2026-06-11 (1,394 rows) and ended at 859,421,876.91 IRR — it did **not** match the committed metrics file's period | read in Stage 0; deleted in Stage 2b |
 | `README.md:600` contains a leftover AI-chat sentence | `sed -n '598,602p' README.md` |
-| Undeclared third-party imports exist: `yfinance` (2 files), `curl_cffi` (2), `pytest` (2), `requests` (5, declared only as a commented line) | `grep -rl` per module |
+| Undeclared third-party imports existed before Stage 2b: `yfinance` (2 files), `curl_cffi` (2), `pytest` (2), `requests` (5, commented line) | `grep -rl` per module; **fixed** — `requirements.txt` rebuilt in Stage 2b |
 | `python-dotenv` is imported nowhere (0 files) | `grep -rl "import dotenv"` |
 
 ### Stage 1 verified facts
@@ -116,7 +137,100 @@ Everything below was produced by a command in this session. Nothing here is copi
 | Post-block `Gold~Ounce` corr, identical rows: **+0.3577 (shift 0) vs −0.1262 (shift +1)**, n=238 | B2.2 |
 | Block Friday: median abs return **1.179%**, zero-change share **0.00**, n=86 | B2.5 |
 | Relabel +1: **0 collisions**, 502 rows moved, row count 3,554 / 4,002 unchanged | B5 |
-| `signal_history.jsonl`: 7 records, **6 at ratio 100.0**, 1 at **10,000.0** | `api_layer/cache/signal_history.jsonl`; see D15 |
+| `signal_history.jsonl`: 7 records, **6 at ratio 100.0**, 1 at **10,000.0** | read in Stage 1b from `api_layer/cache/signal_history.jsonl` (deleted in Stage 2b); see D15 |
+
+## Stage 2b acceptance outputs
+
+All commands run in this session on `refactor/honest-portfolio` at `66b2353` (docs commit follows).
+
+### 1. Tests
+
+`pytest` is **not installed in `.venv`** (verified: `ModuleNotFoundError`). A scratch environment was used and nothing was installed into the repo:
+
+```bash
+python3 -m venv /tmp/pytest-scratch
+/tmp/pytest-scratch/bin/pip install pytest          # pytest 9.2.0
+PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
+  /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q
+```
+
+```
+platform linux -- Python 3.12.3, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/arshiaask/projects/Gold_Usd_Oil_IRR
+configfile: pytest.ini
+plugins: anyio-3.7.1, Faker-40.43.0
+collected 20 items
+
+tests/test_data_loader_date_shift.py ......                              [ 30%]
+test_pipeline.py ..............                                          [100%]
+
+============================== 20 passed in 9.69s ==============================
+```
+
+No import errors, no collection errors.
+
+### 2. Minimal API
+
+```bash
+.venv/bin/python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8013
+curl -sS -w "\nHTTP %{http_code}\n" http://127.0.0.1:8013/health
+```
+
+```
+{"status":true,"model_loaded":true,"timestamp":"2026-11-14T17:38:16.608376"}
+HTTP 200
+```
+
+`model_loaded` is `true` here because the scalers exist on disk in this working tree. They are **not tracked**, so a fresh clone reports:
+
+```
+WARNING - Model artifacts missing (scaler_X.pkl, scaler_y.pkl). Server starts; /predict returns 503.
+status: model_missing predictor: None
+```
+
+Verified by pointing the path constants at an absent directory and entering the lifespan. In both cases `/health` returns **200**.
+
+`/model-info` (auth disabled) returned `input_shape (None, 30, 15)`, `output_shape (None, 1)`, `total_parameters 33441`. `/predict` with a 1x2 payload returned **422**; with a valid `(30, 15)` payload returned **200** and a prediction. With auth on and `API_KEY` unset, `/predict` returns **503** (`API key authentication is enabled but API_KEY is not configured`).
+
+### 3. Size
+
+| Metric | Before Stage 2b (`75c927e`) | After (`66b2353`) |
+|---|---|---|
+| `git ls-files \| wc -l` | **117** | **44** |
+| tracked Python files | 71 | 26 |
+| Python LOC (`git ls-files '*.py' \| xargs cat \| wc -l`) | **11,367** | **5,301** |
+| deleted paths vs `75c927e` | — | **75** (5,469 Python LOC) |
+
+### 4. Deleted paths, grouped by reason
+
+| Reason | Paths |
+|---|---|
+| Live bot / dashboard / caches (14) | `api_layer/api_config.py`, `cache/latest_*.json` (4), `cache/raw_response_20260207_130227.json`, `cache/signal_history.jsonl`, `dashboard.py`, `data_fetcher.py`, `live_feature_engineering.py`, `live_predictor.py`, `live_signal_generator.py`, `setup_and_test.py`, `trading_bot.py` |
+| MLOps modules (19) | `src/mlops/`: `__init__`, `ab_testing`, `alerting`, `api_integration`, `audit_store`, `background_tasks`, `drift_detector`, `experiment_tracker`, `metrics_exporter`, `model_governance`, `model_registry`, `model_validator`, `onnx_exporter`, `optimized_predictor`, `phase5_integration`, `prediction_router`, `retraining_pipeline`, `scheduler`, `worker` |
+| Monitoring (8) | `src/monitoring/` (3), `monitoring/` (5: alert rules, Prometheus, Grafana provisioning/dashboard) |
+| Supervisor / startup (3) | `supervisord.conf`, `start.sh`, `quick-start.sh` |
+| Examples / orphans (8) | `examples/` (4), `example_usage.py`, empty `main.py`, `setup.py`, `src/api/client_example.py` |
+| Generated artifacts (13) | `outputs/*.png` (7), `notebooks/catboost_info/` (6) |
+| Tests of deleted code (7) | `test_data_fetcher`, `test_live_predictor`, `test_live_signal_generator`, `test_mlops_api_integration`, `test_mlops_background_tasks`, `test_mlops_endpoints`, `test_phase5_mlops` |
+| Untracked, kept on disk (3) | `data/raw/final_gold_dataset.csv`, `data/processed/advanced_gold_features.csv`, `data/mlops_audit.db` |
+
+### 5. Diff against the legacy tag
+
+```bash
+git diff legacy-pre-refactor --stat | tail -1
+```
+
+```
+ 95 files changed, 2782 insertions(+), 47968 deletions(-)
+```
+
+### 6. Nothing remains under `api_layer/` or `src/mlops/`
+
+```bash
+git ls-files | grep -E 'api_layer|src/mlops|src/monitoring|monitoring/'   # no output
+find api_layer src/mlops                                                  # No such file or directory
+```
+
 
 ## Not verified in this session
 
@@ -134,12 +248,14 @@ Stated plainly so nobody mistakes these for measured facts:
 
 1. **`.agents/` documentation does not exist.** A prior session's memory asserted that `.agents/STATE.md`, `ROADMAP.md`, `CONVENTIONS.md`, `DECISIONS.md`, `LOG.md` and a root `CLAUDE.md` were created at `d1670cc`. They are absent from the working tree and from all git history (`git log --all -- .agents` → empty). The audit was right; the memory was stale and has been corrected.
 2. **`docs/` is no longer empty.** The audit describes it as `EMPTY`, which was accurate when written; it now contains `AUDIT_REPORT.md` plus the Stage 0–1 docs. Timing difference, not an error.
-3. **`tests/` contains 6 live test modules, not 8.** The audit counts 8 "test modules"; the directory holds 6 `test_*.py` files plus `conftest.py` and `__init__.py`. The 2 missing modules exist only as bytecode, which is what the audit meant. Minor wording, no impact.
+3. **The test inventory was wrong in both the audit and this file.** The audit says `tests/` holds "8 test modules (2 sources deleted, .pyc only)". At `d1670cc` there are **7** `test_*.py` sources (verified with `git ls-tree --name-only d1670cc tests/`), plus `conftest.py` and `__init__.py`; no test bytecode is tracked. Stage 1's "6 live test modules, not 8" was also off by one. Corrected here. All 7 tested removed modules and were deleted in Stage 2b.
 4. **Committed backtest metrics and the committed portfolio log disagree.** `backtest_metrics.json` says 2021-01-27 → 2025-12-20 / 1,384 days; `portfolio_log.csv` runs 2021-07-19 → 2026-06-11 / 1,394 rows. Confirmed here. The log matches the audit's *fresh* run (−14.06%, final 859.4M), so the JSON is the stale artifact.
 5. **The audit's weekday table is mislabelled.** It prints `Fri 237 · Sat 236 · Sun 241 · Mon 243 · Tue 240 · Wed 137 · Thu 90`. The real mapping is `Sat 237 · Sun 236 · Mon 241 · Tue 243 · Wed 240 · Thu 137 · Fri 90` — the same counts, rotated by one weekday. Reproduced exactly by an off-by-one label list. The audit's central data-quality finding was an artefact of its own analysis. See `docs/DATA_INTEGRITY.md` §5.
 6. **The audit missed the 2023-10 → 2025-08 block** — a 36% sub-period with a different weekly shape, present identically in both source series. See `docs/DATA_INTEGRITY.md` §7.
 7. **Stage 1 overstated the Jalali field's evidential value.** §6 correctly used `Date_J → Date_G` agreement to refute a conversion bug, but the agreement also means the field cannot detect a date that is wrong in both columns. Stage 1b extends the check to 11,331 records and concludes the field is not an independent witness. Nothing in §6 is wrong; the implication that it could confirm the block is.
 8. **Stage 1's block-alignment test was weaker than it looked.** §7.2 reported the block peaking at lag −1 (+0.231) only slightly ahead of lag 0 (+0.164). That test let the matched row set change between shifts. Stage 1b holds the row set fixed and gets +0.112 → +0.380, with the post-block going +0.358 → −0.126. The Stage 1b result supersedes §7.2 as the alignment evidence; §7.2 is left as written.
+9. **Two orphan files the audit did not mention.** `logs/baseline_metrics.json` refers to a baseline-evaluation script that is not in the repo, and `setup.py` declares a package that nothing installs or imports. Both were removed in Stage 2b. Neither affected any published number.
+10. **No contradiction in the audit's account of the MLOps layer.** Every module in `src/mlops/` was imported only by `src/api/main.py` and its own tests; deleting the layer required rewriting the API but broke nothing in the training, feature or evaluation path. The audit's "never completed a cycle" description is consistent with what was removed.
 
 No contradiction was found in the audit's dependency claims, its `.env` finding, its "no CI" finding, its account of the loader/merge/ffill, or its README-quote evidence.
 
@@ -155,11 +271,24 @@ No contradiction was found in the audit's dependency claims, its `.env` finding,
 git show legacy-pre-refactor:README.md
 git ls-tree -r --name-only legacy-pre-refactor | head
 
-# Re-derive the row counts
+# Re-derive the row counts (data files are on disk but untracked)
 wc -l data/raw/final_gold_dataset.csv data/processed/advanced_gold_features.csv
 
 # Re-derive the weekday table (the audit's version is mislabelled)
 .venv/bin/python -c "import pandas as pd; d=pd.read_csv('data/raw/final_gold_dataset.csv',index_col='Date',parse_dates=True); print(d.index.day_name().value_counts())"
+
+# Tests. pytest is not installed in .venv; use a scratch environment.
+python3 -m venv /tmp/pytest-scratch && /tmp/pytest-scratch/bin/pip install pytest
+PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
+  /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q
+
+# Minimal API
+.venv/bin/python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000
+curl -sS http://127.0.0.1:8000/health
+
+# Regenerate features from the corrected data (writes to data/processed/, ignored)
+.venv/bin/python src/feature_eng.py
 ```
 
-There is **no working test command yet**: `pytest` is not installed in `.venv`, `Makefile` does not exist, and 3 of the 6 test modules fail collection. `make test` is a Stage 2 deliverable, not a current capability. Do not document it as one.
+`pytest` is not a dependency of the runtime venv; `requirements.txt` lists it for a fresh environment. There is still no `Makefile` (`make test` is a Stage 5 deliverable). Data files are **not** in a fresh clone: `data/sample/` is, and the full series must be fetched or supplied locally.
+
