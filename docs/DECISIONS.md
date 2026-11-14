@@ -112,50 +112,146 @@ A contiguous block, 2023-10-27 → 2025-08-06 (503 rows, 36.1% of the modelled f
 
 ---
 
+## D10 — Currency stays Rial; every label says IRR
+
+**Date:** 2026-11-14 · **Status:** accepted (was O1)
+
+The series is stored and modelled in Rial. Nothing is converted. Every axis label, metric, README line and API description says **IRR**, never Toman.
+
+**Context:** §10 of `docs/DATA_INTEGRITY.md` verifies the values are Rial (gold/USD/ounce identity holds to a 1.010 median). Every "Toman" label in the current code and README understates the unit by 10×.
+
+**Consequences:** presentation-layer conversion to Toman is rejected — it would create a second unit to reason about for no benefit. The 1B-IRR starting capital is quoted as ≈ $555 at the end-of-sample rate, and the unit is stated next to it. Any remaining "Toman" string is a defect to be fixed in Stage 2.
+
+---
+
+## D11 — `geram18` is the intended product
+
+**Date:** 2026-11-14 · **Status:** accepted (was O2)
+
+The target series is the 18-karat gram price of gold in Rial (`geram18`), with `price_dollar_rl` (USD/IRR) as the second Iranian series. Not a coin (`sekeb`, `emami`), not the ounce.
+
+**Context:** the whole pipeline, the config (`config/settings.py:49`) and the gold/USD/ounce identity all point at `geram18`. A coin series would change both the economics and the narrative.
+
+**Consequences:** the README describes the product as "18k gold, Rial per gram". The 0.75 factor in the ounce identity is explained as the 18k/24k ratio rather than left implicit.
+
+---
+
+## D12 — Keep a minimal API; Streamlit is only the UI
+
+**Date:** 2026-11-14 · **Status:** accepted (was O3)
+
+Keep exactly three endpoints: `/health`, `/model-info`, `/predict`. Streamlit is a presentation layer that calls the same model code, not a parallel serving path.
+
+**Context:** the old repo had an API, a Streamlit app, a live bot and a supervisor all reaching the model by different routes, which is how the live path acquired its own unit and scale bugs.
+
+**Consequences:** the API surface is small enough to test exhaustively. Everything not needed by those three endpoints is out of scope for Stage 2.
+
+---
+
+## D13 — Target role is ML Engineer
+
+**Date:** 2026-11-14 · **Status:** accepted (was O4)
+
+The portfolio is aimed at **ML Engineer** roles. Stage 5 gives depth to honest evaluation, reproducibility and documentation. MLOps stays minimal: a working Docker image and a reproducible run, no registry, no tracking server, no orchestration.
+
+**Context:** the repo's existing MLOps layer never completed a cycle (empty registry, zero audit rows, zero MLflow runs, broken ONNX export). Depth there would advertise something that does not work.
+
+**Consequences:** evaluation discipline is the headline. CI, experiment tracking and deployment automation are explicitly out of scope and are not mentioned as capabilities.
+
+---
+
+## D14 — No raw data in the repo; fetch script plus a small sample
+
+**Date:** 2026-11-14 · **Status:** accepted (was O5)
+
+Do not commit the raw TGJU series. Commit a fetch script and a documented schema, plus a sample of roughly the last 200 rows so the repo runs offline. No full-data redistribution until TGJU permission is confirmed.
+
+**Context:** the source is a single commercial publisher with no stated redistribution licence. The current repo commits 1,424 merged rows and a 3,775-record raw response.
+
+**Consequences:** the committed CSVs are removed in Stage 2. Every result in the README must be reproducible from the fetch script, and the README states plainly that the full data is not redistributed. The 200-row sample is enough to exercise the pipeline, not enough to be a substitute for the source.
+
+---
+
+## D15 — `signal_history.jsonl` was not hand-edited; one record carries a double-scaling bug
+
+**Date:** 2026-11-14 · **Status:** accepted (was O6) · **Verified in Stage 1b**
+
+The author does not recall editing the file. The 442.95 vs 0.0443 mismatch is a **unit-conversion bug in one record**, not an edit.
+
+**Evidence (Stage 1b):** the file has 7 records. Six have `predicted_return_pct / predicted_log_return` exactly 100.0. Only the first (2026-02-08T14:27) has 10,000.0. That value is the float32 result of multiplying the log return by 100 twice: `442.9512939…` versus the recorded `442.9512978` — a relative difference of 8.6e-9, i.e. float32 precision. The same record's own `reasoning` string says "Predicted return 4.43%", computed with a single ×100. The current writer (`api_layer/live_predictor.py:260`) applies ×100 once.
+
+**Consequences:** the record is a genuine artefact of an earlier double-scaling code path, not fabricated data, so the file may be cited — but only with that record excluded or annotated. It is not evidence of a systematic unit bug: 6 of 7 records are correct.
+
+---
+
+## D16 — Raw price-level features are an unexplained defect, documented as a lesson
+
+**Date:** 2026-11-14 · **Status:** accepted (was O7)
+
+The author does not know why `SMA_7`, `MACD` and `Bollinger_*` were passed to the model as absolute Rial levels instead of being normalized. There is no deliberate rationale to reconstruct.
+
+**Context:** this is the single largest modelling defect and the audit's most likely explanation for the train→test distribution shift. Ridge on these features emits `LinAlgWarning: ill-conditioned matrix (rcond ≈ 3e-18)` (reproduced in Stage 1, §9.2).
+
+**Consequences:** Stage 3 normalizes them. "Lessons Learned" states plainly that the choice was a mistake with no justification — the honesty is the point of the piece.
+
+---
+
+## D17 — Deployment target: light Streamlit app plus a simple Docker image
+
+**Date:** 2026-11-14 · **Status:** accepted (was O8)
+
+Ship a light Streamlit app and a single simple Docker image. Primary host is Streamlit Community Cloud.
+
+**Context:** Community Cloud may not be able to reach TGJU. The README's four-service compose stack does not exist; `docker-compose.yml` has one service.
+
+**Consequences:** the hosted app must work from the **bundled sample plus the saved model**, with no network dependency at runtime. The fetch script is for local refresh only. The compose file is reduced to what actually exists.
+
+---
+
+## D18 — G1 resolution step: option (c), two internal sources, one step
+
+**Date:** 2026-11-14 · **Status:** accepted · **Executed in Stage 1b**
+
+Resolve the 2023-10-27 → 2025-08-06 block before choosing between fixing it and documenting it, using two sources that already exist inside the project rather than an external archive:
+
+1. **The Jalali date field** in the raw TGJU response, which `src/data_loader.py:70` discards. Convert with a verified converter and compare against the Gregorian date the code used, inside and outside the block.
+2. **Alignment tests** restricted to the block, in a scratch copy: gold↔ounce and USD↔ounce contemporaneous correlation under 0/+1-day relabelling, the `Gold_IRR ≈ 0.75·Ounce/31.1035·USD_IRR` identity under the same shifts inside vs outside the block, and a fixed-holiday price-change check.
+
+**Context:** Stage 1 could only show that the block *looks* like a one-day-early label. The competing explanation — a change in TGJU's publishing schedule rather than its date arithmetic — would make a date fix actively harmful.
+
+**Consequences:** the decision rule was fixed in advance. If the Jalali-derived dates *and* the alignment tests both indicate one day early, fix by using the Jalali-derived dates for the whole series; otherwise document the block as a known limitation and add a sensitivity analysis to Stage 3. Result: see `docs/DATA_INTEGRITY.md` "Stage 1b". The final G1 call is the owner's.
+
+---
+
 ## Open decisions
 
 These are the owner's calls. Each names the stage it blocks.
 
-### G1 — What to do about the 2023-10-27 → 2025-08-06 block *(blocks Stage 2 onward)*
+### G1-final — Apply the +1 relabel, or document only? *(blocks Stage 2 onward)*
 
-Three options:
+Stage 1b is complete. The evidence now separates cleanly into two halves:
 
-- **(a) Fix it.** Apply a +1-day correction to the 503 rows inside the block in `DataLoader.get_tgju_history`, before the gold/USD merge. ~1 hour of work, no retraining cost if done before Stage 3. **Risk: if the block is a publishing-schedule change rather than a date shift, the fix introduces a 503-row error.**
-- **(b) Document it and leave the data alone.** Record it as a known limitation, note that it sits entirely in train/val and never in test, and carry on. Zero risk, but 36% of the training data stays misaligned.
-- **(c) Resolve it first.** Spend one step finding an independent source for a handful of dates inside the block (Wayback snapshot of the TGJU history page, a Persian financial archive) before choosing (a) or (b).
+- **The Jalali field carries no information.** It agrees with the Gregorian field the code already uses in 11,331 of 11,331 records across three datasets and two vintages, inside and outside the block. TGJU derives both from one record, so a conversion bug would show as a non-zero offset and none exists. The Jalali field cannot witness the defect.
+- **The alignment tests are decisive.** On an identical set of 235 Iranian returns, matching the ounce one day later raises the block's same-day correlation from **+0.112 to +0.380** (the clean post-block level is +0.358), while doing the same to the post-block data destroys it (**+0.358 → −0.126**). The block's Friday rows carry the weekend move (median |return| 1.179%, zero-change share 0.00) — a move a row dated Friday cannot contain, because the market is closed on Friday.
 
-Recommended: **(c), then (a)** if the source confirms the shift, otherwise **(b)**. Recommendation only — the call is the owner's.
+Because the decision rule required *both* sources to agree, and the first is silent, the rule points at **(b) document only**. Branch (a) as originally worded — "use the Jalali-derived dates" — is not implementable: it is a literal no-op. A fix would have to be the explicit window relabel from §13.1.
 
-### O1 — Rial or Toman labeling *(blocks Stage 3 and Stage 5)*
+Two options:
 
-The series is Rial: `TICKER_GOLD="geram18"`, values 10.5M–206.1M (audit-reported). Every "Toman" label in the current README and code is off by 10×, and the 1B IRR starting capital is ≈ $555.
+- **(a) Apply the +1 window relabel** to the 502 raw rows (503 in the merged frame), before the gold/USD merge. Verified in Stage 1b: zero date collisions, no row-count change, no price change. ~1 hour plus a re-run of feature engineering; retraining happens in Stage 3 anyway. **Residual risk: the mechanism is inferred, not observed at the source.**
+- **(b) Document it and leave the data alone.** Record it as a known limitation, note it sits entirely in train/val and never in test, and make Stage 3 evaluate with and without the block. Zero risk, but 36% of the training data stays misaligned.
 
-Options: (a) keep Rial everywhere and say so; (b) convert to Toman (÷10) at the presentation layer only; (c) convert in the data layer. Affects every number in the final README.
+Recommended: **(b)**, because the decision rule requires both sources and one is silent, and because a Stage 3 sensitivity analysis preserves the option at no risk. But the Stage 1b alignment evidence is materially stronger than Stage 1's, and (a) is now a defensible engineering call rather than a guess. The owner decides.
 
-### O2 — Is the gram-18 series the intended product? *(blocks Stage 3)*
+### Resolved in Stage 1b
 
-`geram18` is the 18-karat gram price — not a coin (`sekeb`, `emami`) and not the ounce. If the intent was a coin or an investment product, the series and the entire narrative change.
-
-### O3 — Keep a minimal API at all? *(blocks Stage 2)*
-
-The plan assumes yes: `/health`, `/model-info`, `/predict` only. The alternative is to drop serving entirely and present the work as a research notebook plus report. Keeping it demonstrates backend skills; dropping it removes a surface that can only ever serve a model with no edge.
-
-### O4 — Target role emphasis *(blocks Stage 5 framing)*
-
-Which story is the README optimised for: **ML engineer** (modeling + evaluation rigor), **MLOps / platform** (reproducibility, CI, Docker, serving), or **backend / data** (pipeline, API, data quality)? Owner to fill in. This decides which sections get depth and which get a paragraph.
-
-### O5 — Data licensing and redistribution *(blocks Stage 5)*
-
-Do you have permission to redistribute TGJU-sourced data in a public repo? If not, the committed CSVs must be replaced by a fetch script plus a documented schema, and the README must say the data is not redistributed.
-
-### O6 — Provenance of `api_layer/cache/signal_history.jsonl` *(blocks nothing; affects credibility)*
-
-One record claims `predicted_return_pct` 442.95 while its own `predicted_log_return` is 0.0443 — inconsistent by 100×. Was the file hand-edited? If so, it should not be cited as evidence anywhere, even as a "real log line".
-
-### O7 — Why were raw price-level features used? *(blocks Stage 3 narrative only)*
-
-`SMA_7`, `MACD` and `Bollinger_*` were fed to the model as absolute Rial levels rather than normalized. This is the single largest modeling defect and the audit's most likely explanation for the 13σ train→test shift. If there was a deliberate reason, it belongs in "Lessons Learned"; if not, say so plainly — that honesty is the point of the piece.
-
-### O8 — Real deployment target *(blocks Stage 5)*
-
-The `Dockerfile` targets Hugging Face Spaces (Streamlit on 7860); the README documents a four-service compose stack that does not exist (`docker-compose.yml` has one service, `ml-stack`). Which one is the actual target for the "one-command Docker" deliverable?
+| Was | Decision | One-line answer |
+|---|---|---|
+| O1 | **D10** | Keep Rial, label IRR everywhere |
+| O2 | **D11** | `geram18` is the intended product |
+| O3 | **D12** | Keep `/health`, `/model-info`, `/predict`; Streamlit is only the UI |
+| O4 | **D13** | ML Engineer; depth on evaluation, reproducibility, documentation |
+| O5 | **D14** | No raw data committed; fetch script + ~200-row sample |
+| O6 | **D15** | Not hand-edited; one record has a ×10000 double-scaling bug |
+| O7 | **D16** | No rationale; documented as a lesson learned |
+| O8 | **D17** | Light Streamlit app + simple Docker image |

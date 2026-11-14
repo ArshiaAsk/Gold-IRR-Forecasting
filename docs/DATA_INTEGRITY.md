@@ -23,6 +23,8 @@ A *different* defect exists, and it is real: TGJU's own records run **one day ea
 | **H6** | A 21-month sub-period (2023-10-27 → 2025-08-06) is dated one day early | **VERIFIED as an anomaly; INFERRED as a one-day shift** |
 | **U1** | Values are Rial, labelled Toman | **VERIFIED** |
 
+**Stage 1b update (2026-11-14).** H6's mechanism is no longer merely inferred: alignment against `GC=F` on an identical row set raises the block's same-day correlation from +0.112 to +0.380 (the clean post-block level is +0.358), while the same operation collapses the post-block correlation to −0.126. The Jalali field, which Stage 1 expected to act as a second witness, is shown to be a redundant encoding of `Date_G` — 11,331 of 11,331 records agree — so it cannot witness the defect. See "Stage 1b" at the end of this document. The table above is the Stage 1 state and is left as written.
+
 The single most important line of code for the calendar question:
 
 ```
@@ -651,3 +653,304 @@ python /tmp/s1/impact.py
 ```
 
 The scratch scripts are not part of the repository and will not survive a reboot; their output is quoted verbatim in this document.
+
+---
+
+# Stage 1b — Independent evidence for the 2023-10-27 → 2025-08-06 block
+
+**Date:** 2026-11-14 · **Branch:** `refactor/honest-portfolio` · **HEAD at start:** `14dec06`
+**Scope:** read-only. No file under `src/`, `data/`, `models/` or `config/` was modified. All experiments ran in `/tmp/s1b` against copies.
+**Trigger:** GATE 1, decision G1 = option (c) — resolve the block with sources that already exist inside the project before choosing fix or document.
+
+Stage 1 established that the block *looks* like a one-day-early label and that a competing explanation (a change in TGJU's publishing schedule rather than its date arithmetic) could not be excluded. This stage tests that directly, with two sources that do not depend on each other: the **Jalali date field** that the loader throws away, and **alignment against the global gold series**.
+
+## B1. Source 1 — the Jalali field in the raw response
+
+### B1.1 Where it is
+
+Every TGJU record has 8 positional elements. The last two are the Gregorian and Jalali dates:
+
+```
+['1,609,350', '1,572,300', '1,624,700', '1,622,400', '<span …>53900</span>', '<span …>3.44%</span>',
+ '2026/02/05', '1404/11/16']
+   Open        Low         High        Close       Change                   Percent      Date_G       Date_J
+```
+
+`src/data_loader.py:70` selects `['Date_G', 'Close']` and discards `Date_J`. Index 7 of the raw row is therefore unused evidence.
+
+The committed cache holds only `price_dollar_rl` (3,775 rows, 2011-11-26 → 2026-02-05) and it **does cover the block**: 502 rows fall in 2023-10-27 → 2025-08-06. It has no gold series. I fetched both series live (network was available) into `/tmp/s1b`; that gives a second vintage nine months newer than the cache, which turns out to be useful.
+
+### B1.2 The converter is verified before it is used
+
+Implemented from the jalaali-js / Borkowski algorithm rather than imported, so it can be wrong in a way I would see. Checks:
+
+```
+Nowruz 1404                  1404/01/01 -> 2025-03-21 expected 2025-03-21  OK
+Nowruz 1403                  1403/01/01 -> 2024-03-20 expected 2024-03-20  OK
+Nowruz 1402                  1402/01/01 -> 2023-03-21 expected 2023-03-21  OK
+Nowruz 1401                  1401/01/01 -> 2022-03-21 expected 2022-03-21  OK
+Nowruz 1400                  1400/01/01 -> 2021-03-21 expected 2021-03-21  OK
+Nowruz 1399                  1399/01/01 -> 2020-03-20 expected 2020-03-20  OK
+Nowruz 1398                  1398/01/01 -> 2019-03-21 expected 2019-03-21  OK
+Esfand 30 in leap 1403       1403/12/30 -> 2025-03-20 expected 2025-03-20  OK
+newest TGJU row              1405/08/21 -> 2026-11-12 expected 2026-11-12  OK
+oldest USD row               1390/09/05 -> 2011-11-26 expected 2011-11-26  OK
+oldest gold row              1392/04/31 -> 2013-07-22 expected 2013-07-22  OK
+cached row                   1404/11/16 -> 2026-02-05 expected 2026-02-05  OK
+22 Bahman 1402               1402/11/22 -> 2024-02-11 expected 2024-02-11  OK
+22 Bahman 1403               1403/11/22 -> 2025-02-10 expected 2025-02-10  OK
+round-trip days 1900-2100: 73349 days, mismatches = 0
+ALL KNOWN OK: True
+```
+
+Fourteen known dates, including a leap-year Esfand 30 and five Nowruz boundaries, plus an exhaustive 73,349-day round trip over 1900–2100. The converter is sound.
+
+### B1.3 Offset distribution, inside vs outside the block
+
+```bash
+python /tmp/s1b/offsets.py
+```
+
+```
+geram18 live                   n=3554  ALL {0: 3554}  IN {0: 502}  OUT {0: 3052}
+    weekday IN : Sat 82  Sun 82  Mon 84  Tue 85  Wed 83  Thu 0  Fri 86
+    weekday OUT: Sat 549  Sun 552  Mon 553  Tue 546  Wed 563  Thu 274  Fri 15
+price_dollar_rl live           n=4002  ALL {0: 4002}  IN {0: 502}  OUT {0: 3500}
+    weekday IN : Sat 82  Sun 82  Mon 84  Tue 86  Wed 82  Thu 0  Fri 86
+    weekday OUT: Sat 623  Sun 621  Mon 629  Tue 623  Wed 641  Thu 341  Fri 22
+price_dollar_rl cache 2026-02  n=3775  ALL {0: 3775}  IN {0: 502}  OUT {0: 3273}
+    weekday IN : Sat 82  Sun 82  Mon 84  Tue 86  Wed 82  Thu 0  Fri 86
+    weekday OUT: Sat 585  Sun 583  Mon 590  Tue 584  Wed 605  Thu 304  Fri 22
+```
+
+**11,331 conversions, not one non-zero offset.** The distribution is a point mass at 0 both inside and outside the block, so the derived weekday histogram (printed above, and identical for both series) is the histogram of `Date_G` by construction.
+
+Two conclusions follow, and only one of them is about the data:
+
+1. **A Jalali→Gregorian conversion bug is impossible.** If TGJU computed `Date_G` from `Date_J` with a wrong algorithm, the offset would be non-zero somewhere. It is never non-zero.
+2. **The Jalali field is not an independent witness.** TGJU emits both fields from a single internal record. Agreement between them proves internal consistency, not correctness. If the record's date is one day early, *both* fields are one day early and the offset stays 0.
+
+### B1.4 Two vintages, nine months apart
+
+The cached snapshot was captured 2026-02-05, the live fetch 2026-11-12. If TGJU had silently corrected the block in between, the two would differ.
+
+```
+cache block dates: 502   live block dates: 502   identical set: True
+common dates: 502        price identical: 502     price diffs: []
+```
+
+Same 502 dates, same 502 closes. TGJU has not re-dated or revised the block in nine months.
+
+### B1.5 Verdict on source 1
+
+**UNKNOWN — the field carries no information about the block.**
+
+This is not a null result about the data; it is a structural result about the source. The test as specified ("compare Jalali-derived Gregorian vs the date the code used") can only detect a conversion bug, and there is none. It cannot detect a date that is wrong in both fields, which is exactly the hypothesis under test.
+
+One consequence is immediate and matters for the decision rule: **the prescribed fix — "use the Jalali-derived dates for the whole series" — is a literal no-op.** The Jalali-derived dates *are* the dates the code already uses, on all 11,331 records.
+
+## B2. Source 2 — alignment against the global gold series
+
+Yahoo `GC=F` dates are reliable and independent of TGJU. Scratch copy only, `/tmp/s1b`.
+
+### B2.1 Design
+
+The naive version of this test — compare correlations over whatever rows happen to match at each shift — is confounded, because a +1 relabel changes *which* rows join. I ran both.
+
+The clean version fixes the row set: use only Iranian rows that have a Yahoo bar on **both** `d` and `d+1`. The Iranian return vector is then **identical** under shift 0 and shift +1; the only thing that changes is which ounce date it is matched against. Weekday mix is Mon/Tue/Wed/Thu only (Yahoo has no Sat/Sun bars), which is fine — the block has 235 such rows.
+
+### B2.2 Gold vs ounce, identical row set
+
+```bash
+python /tmp/s1b/align5.py
+```
+
+```
+--- Gold_LogRet vs Ounce_LogRet: candidate rows 1274 | weekday mix {'Tue': 370, 'Wed': 366, 'Mon': 338, 'Thu': 200}
+  pre-block 2022-02-16..2023-10-26  n=287  shift+0 corr=+0.0340   shift+1 corr=+0.0454   weekdays={'Wed': 83, 'Tue': 77, 'Mon': 67, 'Thu': 60}
+  BLOCK     2023-10-27..2025-08-06  n=235  shift+0 corr=+0.1119   shift+1 corr=+0.3803   weekdays={'Tue': 82, 'Wed': 78, 'Mon': 75}
+  post-block 2025-08-07..2026-11-12  n=238  shift+0 corr=+0.3577   shift+1 corr=-0.1262   weekdays={'Tue': 65, 'Mon': 60, 'Wed': 57, 'Thu': 56}
+```
+
+| Period | n | shift 0 | shift +1 | reading |
+|---|---|---|---|---|
+| pre-block 2022-02-16 → 2023-10-26 | 287 | +0.0340 | +0.0454 | no discriminating power (link is weak in both) |
+| **block 2023-10-27 → 2025-08-06** | **235** | **+0.1119** | **+0.3803** | **+1 triples it** |
+| post-block 2025-08-07 → 2026-11-12 | 238 | +0.3577 | −0.1262 | **+1 destroys it** |
+
+This is the shape a date-label defect has to produce. Inside the block, moving the match one day later raises the same-day correlation to **+0.380**, which is the level the *clean* post-block period reaches at shift 0 (**+0.358**). Outside the block, the same operation collapses the correlation to −0.126. The block is not merely "a bit better" at +1 — it is restored to the level the rest of the series shows when correctly aligned.
+
+The naive version, over whatever rows match at each shift (`python /tmp/s1b/naive.py`), agrees:
+
+```
+naive alignment: whatever rows match at each shift
+  IN BLOCK  shift +0: corr=+0.1681  n=324
+  IN BLOCK  shift +1: corr=+0.3780  n=320
+  OUT BLOCK shift +0: corr=+0.2042  n=1060
+  OUT BLOCK shift +1: corr=+0.0474  n=1338
+```
+
+### B2.3 USD vs ounce — no discriminating power
+
+```
+  pre-block   n=276  shift+0 corr=-0.0494   shift+1 corr=-0.0140
+  BLOCK       n=235  shift+0 corr=+0.0228   shift+1 corr=+0.0160
+  post-block  n=237  shift+0 corr=-0.0830   shift+1 corr=-0.0638
+```
+
+USD/IRR is not driven by the gold price, so this test has nothing to detect at any alignment. Reported for completeness; it neither supports nor contradicts anything.
+
+### B2.4 The ounce identity under each shift
+
+`Gold_IRR ≈ 0.75 · Ounce_USD / 31.1035 · USD_IRR`. Both Iranian series are shifted together, so the test is not contaminated by the partial-fix lookahead risk of §9.3; only the ounce is the independent anchor. Under a correct alignment the ratio is a stable premium; under a one-day misalignment it should be noisier.
+
+```
+=== TEST 3 windowed: identity ratio dispersion ===
+  pre-block 2022-02-16..2023-10-26 shift +0: n= 277 median=1.0178 IQR=[1.0050,1.0284] sd(log)=0.0245 MAD(log)=0.0119
+  pre-block 2022-02-16..2023-10-26 shift +1: n= 352 median=1.0150 IQR=[1.0031,1.0282] sd(log)=0.0242 MAD(log)=0.0124
+  BLOCK     2023-10-27..2025-08-06 shift +0: n= 323 median=1.0049 IQR=[0.9925,1.0170] sd(log)=0.0228 MAD(log)=0.0121
+  BLOCK     2023-10-27..2025-08-06 shift +1: n= 319 median=1.0039 IQR=[0.9914,1.0140] sd(log)=0.0220 MAD(log)=0.0110
+  post-block 2025-08-07..2026-11-12 shift +0: n= 243 median=0.9891 IQR=[0.9754,1.0028] sd(log)=0.0197 MAD(log)=0.0139
+  post-block 2025-08-07..2026-11-12 shift +1: n= 302 median=0.9880 IQR=[0.9726,1.0011] sd(log)=0.0247 MAD(log)=0.0150
+```
+
+Direction is consistent with B2.2 — in the block, +1 improves both dispersion measures (sd −3.5%, MAD −9%); in the post-block, +1 makes both worse (sd +25%, MAD +8%); pre-block is a wash. But the effect is small, and the Iranian premium's own volatility (sd ≈ 2%) swamps a one-day gold move. **This test is consistent but weak; it does not decide anything on its own.** It is reported because it was specified, not because it is decisive.
+
+### B2.5 Where the weekend move sits
+
+The day that carries the accumulated weekend move is diagnostic: it should be the first trading day after the rest day.
+
+| Period | weekday | n | median abs return | mean abs return | zero-change share |
+|---|---|---|---|---|---|
+| BLOCK | Sat | 82 | 0.908% | 1.389% | 0.00 |
+| BLOCK | Sun | 82 | 1.018% | 1.400% | 0.00 |
+| BLOCK | Mon | 84 | 0.904% | 1.218% | 0.00 |
+| BLOCK | Tue | 85 | 0.773% | 0.973% | 0.00 |
+| BLOCK | Wed | 83 | 0.551% | 0.728% | 0.00 |
+| **BLOCK** | **Fri** | **86** | **1.179%** | **1.622%** | **0.00** |
+| OUT | Sat | 549 | 0.871% | 1.508% | 0.01 |
+| OUT | Sun | 552 | 0.608% | 1.088% | 0.03 |
+| OUT | Mon | 552 | 0.590% | 1.030% | 0.05 |
+| OUT | Tue | 546 | 0.539% | 0.913% | 0.06 |
+| OUT | Wed | 563 | 0.637% | 0.981% | 0.04 |
+| OUT | Thu | 274 | 0.000% | 0.359% | 0.60 |
+| OUT | Fri | 15 | 0.337% | 0.842% | 0.00 |
+
+Outside the block the largest median move is Saturday (0.871%), and Thursday is a published non-trading day: 60% of Thursday rows repeat the previous close exactly. Inside the block the largest median move is **Friday (1.179%)** and there are **zero** zero-change rows anywhere. Friday is behaving like a Saturday, which is what a one-day-early label produces.
+
+A caveat I checked rather than assumed: if the block were a relabel, the block's *Wednesday* would be a real Thursday, and one might expect Thursday-style carry-overs there. It has none (zero-share 0.00). That is not a contradiction — TGJU's Thursday practice changed over time:
+
+```
+Thursday rows, geram18, by year:  n, zero-change share, median |ret|
+  2013: n= 11 zero=0.82   2014: n= 15 zero=1.00   2018: n= 31 zero=0.06
+  2020: n= 40 zero=0.93   2021: n= 43 zero=0.91   2022: n= 44 zero=0.91
+  2023: n= 24 zero=0.88   2025: n= 19 zero=0.00   2026: n= 43 zero=0.05
+```
+
+In 2020–2023 Thursday is a carry-over; in 2025–2026 it is a real trading day (median 1.08% and 0.59%). So a real Thursday in 2023–2025 would *not* be a zero-change row, and the block's Wednesday looks the way a real Thursday in that era should.
+
+### B2.6 Fixed holidays
+
+Iran's market is closed on 22 Bahman and on the Nowruz holidays (1, 12 and 13 Farvardin). A closed day cannot carry a price move. Under shift 0, the row labelled with a holiday date should therefore be absent or show a zero change; under a +1 relabel the holiday date should lose its row.
+
+```
+  2024-02-11 22 Bahman    BLOCK  shift0= -0.1490%  (row labelled h-1 = absent)
+  2024-04-01 13 Farvardin BLOCK  shift0= +3.7668%  (row labelled h-1 = absent)
+  2025-02-10 22 Bahman    BLOCK  shift0= -3.4625%  (row labelled h-1 = absent)
+  2025-04-02 13 Farvardin BLOCK  shift0= +0.6882%  (row labelled h-1 = absent)
+  2026-04-01 12 Farvardin         shift0= +0.0069%  (row labelled h-1 = +0.0011%)
+  2026-04-02 13 Farvardin         shift0= -0.0080%  (row labelled h-1 = +0.0069%)
+```
+
+Every holiday date outside the block that has a row at all shows a change of |ret| ≤ 0.008%; most holiday dates outside the block have no row at all (2019–2023, 2026-02-11, 2027). Inside the block, all four holiday dates present in the grid carry a real move, two of them larger than 3.4%. Under +1 all four dates become empty, matching the outside-block behaviour.
+
+n = 4, so this is supporting evidence, not a proof. It is also slightly circular: the "row labelled h−1 = absent" column shows that the +1 mapping lands on dates the grid does not cover, which is a property of the grid, not an independent measurement.
+
+### B2.7 Verdict on source 2
+
+**VERIFIED — the block's Iranian rows are one day early relative to the global series.**
+
+The decisive result is B2.2: on an identical set of 235 Iranian returns, moving the ounce match one day later raises the correlation from +0.112 to +0.380, the level the clean post-block data reaches at shift 0 (+0.358); the same operation on the post-block data collapses it to −0.126. A test that improves the block to exactly the clean-period level, and destroys the clean period, is measuring alignment and nothing else.
+
+B2.5 and B2.6 agree. B2.4 agrees weakly. B2.3 is uninformative by construction.
+
+## B3. Applying the decision rule
+
+The rule was: **if the Jalali-derived dates AND the alignment tests agree that the block is one day early, fix by using the Jalali-derived dates for the whole series; if they disagree or are inconclusive, document the block and add a sensitivity analysis to Stage 3.**
+
+- Source 1 (Jalali): **UNKNOWN.** Zero information — the field is a second encoding of the same record and agrees with `Date_G` in 11,331 of 11,331 rows.
+- Source 2 (alignment): **VERIFIED** one day early.
+
+The two sources do not agree, because one of them cannot speak. **Branch (b) applies: document the block as a known limitation and add a sensitivity analysis to Stage 3.**
+
+There is a second, independent reason branch (a) is unavailable as written: its remedy is "use the Jalali-derived dates for the whole series", and that is a no-op. The Jalali-derived dates are byte-identical to the dates in use. If the block is to be fixed at all, it must be by the explicit window relabel in §13.1, not by switching date fields.
+
+This is a case where the rule and the evidence point in slightly different directions, and the difference should not be hidden: the evidence for a one-day-early label is now much stronger than it was at Stage 1, but the *rule's* first branch was built on the assumption that the Jalali field would act as a second witness, and it does not. I apply the rule as written and recommend (b), while flagging that (a) is now a defensible engineering choice rather than a guess.
+
+## B4. Could this be a TGJU publishing-schedule change instead?
+
+Partly, and the distinction is real. TGJU's publication behaviour genuinely varies by year — Thursday rows are 0.4% of 2015–2017, 14–15% of 2020–2022, 0% of 2024, 16.7% of 2026; Friday rows are 0% in most years and 17.1% in 2024. "The Thursday count changed" is therefore not anomalous on its own, and a schedule change is a plausible *a priori* alternative.
+
+But the specific schedule-change mechanism that would explain the block — TGJU begins publishing a Friday row and stops publishing Thursday — requires the Friday row to carry **Friday's** price. The Iranian market is closed on Friday, so there is no Friday price; TGJU would have to republish Thursday's close. That would produce a Friday row with a **zero change**.
+
+Observed: the block's Friday rows have zero-change share **0.00**, median |return| **1.179%** and mean **1.622%** — the largest of any weekday, i.e. the accumulated weekend move. And relabelling the block +1 raises the same-day correlation with the ounce to the clean-period level.
+
+**Which result distinguishes the two:** the size of the Friday return, and whether +1 relabelling improves same-day alignment. A schedule change gives a zero-change Friday and no alignment improvement; a date shift gives a large Friday return and a large alignment improvement. Both observed results point to a date shift.
+
+The one result that would settle it beyond inference is an external record of a single date inside the block — an archived TGJU history page or a Persian financial archive showing, say, that 2024-03-15 was a Friday close. That is the one thing G1 option (c) could not supply from inside the project, and I did not have it.
+
+## B5. Recommendation
+
+**Document only (option b), with a Stage 3 sensitivity analysis.** Effort: the documentation is this section plus a paragraph in `docs/STATE.md`; the sensitivity analysis is one extra training/evaluation run on a frame with the 503 block rows dropped, which is cheap because Stage 3 retrains anyway. Risk: none — no data file is touched.
+
+**If the owner instead chooses to fix (option a):** the implementation is §13.1, and Stage 1b adds three facts that make it safer than it looked:
+
+```
+block rows relabelled +1 (geram18): 502 | unique shifted: 502
+collisions with non-block rows: 0 | collisions inside shifted: 0
+new total rows: 3554 vs original: 3554 | index unique: True
+weekday histogram after relabel: Sat 635 Sun 634 Mon 635 Tue 630 Wed 648 Thu 357 Fri 15
+```
+
+No date collisions, no row-count change, no price change, index stays unique. For `price_dollar_rl`: 502 rows, 0 collisions, 4,002 rows before and after. The relabel is a pure date-axis operation and is mechanically safe; the residual risk is entirely about whether TGJU's intent was a relabel, which B4 narrows but does not close.
+
+| | Document (b) | Fix (a) |
+|---|---|---|
+| Effort | ~0 (this section) + one Stage 3 run | ~1 hour + feature re-run |
+| Risk | 36% of training data stays misaligned | a 503-row error if the mechanism is not a relabel |
+| Reversible | n/a | yes — it is a constant in one function |
+| Reviewer story | "known limitation, quantified, sensitivity-tested" | "detected, diagnosed, corrected" |
+
+## B6. Reproduction
+
+All commands assume `/tmp/s1b` with `.venv/bin/python`. Nothing writes to the repo.
+
+```bash
+# raw responses with the Jalali field (network required; cache covers USD only)
+#   -> /tmp/s1b/geram18_live.json, price_dollar_rl_live.json
+python - <<'EOF'
+import urllib.request, json
+for slug in ["geram18","price_dollar_rl"]:
+    url=f"https://api.tgju.org/v1/market/indicator/summary-table-data/{slug}"
+    req=urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0',
+        'Referer':f'https://www.tgju.org/profile/{slug}/history','Accept':'application/json'})
+    json.dump(json.loads(urllib.request.urlopen(req, timeout=30).read()), open(f"/tmp/s1b/{slug}_live.json","w"))
+EOF
+
+# converter validation (known dates + 73,349-day round trip)
+python /tmp/s1b/validate_jalali.py
+
+# offset distribution inside/outside the block (B1.3)
+python /tmp/s1b/offsets.py
+
+# alignment: identical-row-set test and weekday return profile (B2.2, B2.5)
+python /tmp/s1b/align5.py
+
+# naive version, for contrast with the fixed-row-set test (B2.2)
+python /tmp/s1b/naive.py
+
+# identity dispersion, USD alignment, holiday table, Thursday-by-year (B2.3, B2.4, B2.6)
+python /tmp/s1b/align3.py
+```
+
+The scratch scripts live in `/tmp/s1b` (`jalali.py`, `validate_jalali.py`, `offsets.py`, `align5.py`, `naive.py`, `align3.py`) and will not survive a reboot. Every figure quoted above is produced by one of them; the code blocks are raw output, the weekday and holiday tables restate it. `align2.py` and `align4.py` were superseded intermediate versions and are not needed to reproduce anything.
