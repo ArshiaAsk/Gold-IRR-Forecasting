@@ -76,9 +76,55 @@ Stage 0 adds `docs/PLAN.md`, `docs/DECISIONS.md`, `docs/STATE.md` and commits th
 
 ---
 
+## D7 — The date axis is not uniformly shifted; the audit's weekday table is wrong
+
+**Date:** 2026-11-14 · **Status:** accepted
+
+The Iranian series is **not** dated one day early. Both TGJU series concentrate on Saturday–Wednesday (84–89%) on their own axes, before any merge. The audit's `Fri 237 · Sat 236 · Sun 241 · Mon 243 · Tue 240 · Wed 137 · Thu 90` is the correct multiset with labels rotated by one weekday; it is reproduced exactly by pairing `dayofweek` (0 = Monday) with a label list starting at `Sunday`.
+
+**Context:** the Stage 0 plan and `docs/STATE.md` treated the weekday distribution as an open, load-bearing anomaly and listed "one-day label shift" as the leading hypothesis. It is neither.
+
+**Consequences:** `docs/DATA_INTEGRITY.md` replaces the audit's weekday finding as the authoritative statement. `docs/AUDIT_REPORT.md` is left unedited (D6) but must not be quoted on this point. No uniform re-dating is permitted — shifting the series by −1 destroys the contemporaneous correlation with global gold (+0.165 → −0.049) and improves no baseline.
+
+---
+
+## D8 — Stage 1 identifies a 21-month sub-period defect but does not fix it
+
+**Date:** 2026-11-14 · **Status:** accepted
+
+A contiguous block, 2023-10-27 → 2025-08-06 (503 rows, 36.1% of the modelled frame, entirely inside train+val), has Thursday rows at exactly zero and Friday rows at 3–5 per month, in both Iranian series with identical boundaries. It is consistent with a one-day-early label but the mechanism is **inferred**, not proven.
+
+**Context:** no independent source for individual dates inside the block was available, and the alternative explanation — a change in TGJU's publishing schedule rather than its date arithmetic — would make a date fix actively harmful.
+
+**Consequences:** the block is documented in `docs/DATA_INTEGRITY.md` §7 and §13 with an explicit risk table. Applying a fix is GATE 1's decision (see below). Until it is answered, Stage 2 does not start and no data file is touched.
+
+---
+
+## D9 — Stage 1 commits documentation only; the audit script is deferred
+
+**Date:** 2026-11-14 · **Status:** accepted
+
+`docs/PLAN.md:48` lists `scripts/audit_calendar.py` as a Stage 1 deliverable. The owner's Stage 1 instruction restricted new files to `docs/DATA_INTEGRITY.md` plus `STATE.md`/`DECISIONS.md`, so no script was committed. All experiments ran in `/tmp/s1`.
+
+**Context:** Stage 1 is read-only by design (D4); a committed script would have been the only executable artifact in a stage whose purpose is evidence, not tooling.
+
+**Consequences:** every figure in `docs/DATA_INTEGRITY.md` was produced by a command run in this session, and the commands are inlined in the document. If a runnable audit script is wanted, it belongs in Stage 2 alongside the rest of `scripts/`.
+
+---
+
 ## Open decisions
 
 These are the owner's calls. Each names the stage it blocks.
+
+### G1 — What to do about the 2023-10-27 → 2025-08-06 block *(blocks Stage 2 onward)*
+
+Three options:
+
+- **(a) Fix it.** Apply a +1-day correction to the 503 rows inside the block in `DataLoader.get_tgju_history`, before the gold/USD merge. ~1 hour of work, no retraining cost if done before Stage 3. **Risk: if the block is a publishing-schedule change rather than a date shift, the fix introduces a 503-row error.**
+- **(b) Document it and leave the data alone.** Record it as a known limitation, note that it sits entirely in train/val and never in test, and carry on. Zero risk, but 36% of the training data stays misaligned.
+- **(c) Resolve it first.** Spend one step finding an independent source for a handful of dates inside the block (Wayback snapshot of the TGJU history page, a Persian financial archive) before choosing (a) or (b).
+
+Recommended: **(c), then (a)** if the source confirms the shift, otherwise **(b)**. Recommendation only — the call is the owner's.
 
 ### O1 — Rial or Toman labeling *(blocks Stage 3 and Stage 5)*
 
