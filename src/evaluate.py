@@ -61,10 +61,11 @@ def _git_commit() -> str:
 
 
 def _setup_logging() -> logging.Logger:
+    """Attach the results/run.log handler. Called from main(), never on import."""
     os.makedirs(RESULTS_DIR, exist_ok=True)
     logger = logging.getLogger("stage3")
     logger.setLevel(logging.INFO)
-    if not logger.handlers:
+    if not any(isinstance(h, logging.FileHandler) for h in logger.handlers):
         fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
         fh = logging.FileHandler(os.path.join(RESULTS_DIR, "run.log"), mode="w", encoding="utf-8")
         fh.setFormatter(fmt)
@@ -75,7 +76,10 @@ def _setup_logging() -> logging.Logger:
     return logger
 
 
-LOGGER = _setup_logging()
+# A NullHandler keeps imported functions quiet; main() replaces it with the
+# file/stream handlers above. Importing this module must not touch run.log.
+LOGGER = logging.getLogger("stage3")
+LOGGER.addHandler(logging.NullHandler())
 
 
 def _set_seeds(seed: int):
@@ -516,6 +520,7 @@ def main(argv=None):
                         help="train and save the primary V2 artifact")
     args = parser.parse_args(argv)
 
+    _setup_logging()
     os.makedirs(RESULTS_DIR, exist_ok=True)
     LOGGER.info("Stage 3 evaluation start; git=%s; args=%s", _git_commit(), vars(args))
     raw = load_raw_prices()
