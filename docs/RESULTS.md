@@ -723,7 +723,8 @@ negative and its CI includes zero. Neither passes.
 - **Touch count:** Stage 3 scored the hold-out three times (V1/V2/V3) and the artifact code
   predicted it once without scoring. Stage 4 added two inference-only passes (a development run
   and the final run, identical outputs). Total **six prediction passes, three scored**, none
-  re-run after a result.
+  re-run after a result. The pre-registered promise was "touched once"; it was **not literally
+  met**, though no scored pass was re-run after its result.
 
 ### 11.11 Reproduce
 
