@@ -1,14 +1,19 @@
-# Stage 3 Results — Honest Modeling and Evaluation
+# Results — Honest Modeling and Evaluation (Stage 3) and Economic Reality (Stage 4)
 
-**Status:** Stage 3 complete. **Stopped at GATE 3.** No README, API, Streamlit, Dockerfile or
-`trading_bot/` changes were made. Stage 4 has not started.
-**Protocol:** `docs/EVAL_PROTOCOL.md`, committed at `798981a` **before any model fit**; one
-pre-run hold-out amendment at `cb75162` (see §8).
-**Run:** 2026-11-14, code commit `8d7715e`, 1,259.6 s (21.0 min) on 8 CPU cores.
-**Results:** `results/eval_V1.json`, `results/eval_V2.json`, `results/eval_V3.json`,
+**Status:** Stage 3 complete; **GATE 3 accepted**, "no demonstrated edge" is final. Stage 4
+"economic reality" complete; **stopped at GATE 4**. `trading_bot/` removed (preserved in
+`legacy-pre-refactor`). No README, API, Streamlit or Dockerfile changes; Stage 5 not started.
+**Stage 3 protocol:** `docs/EVAL_PROTOCOL.md`, committed at `798981a` **before any model fit**;
+one pre-run hold-out amendment at `cb75162` (see §8), and one post-run deviation found in the
+Stage 4 audit (`docs/EVAL_PROTOCOL.md` §11 D-1, summarized in §2.2 and §11.10).
+**Stage 3 run:** 2026-11-14, code commit `8d7715e`, 1,259.6 s (21.0 min) on 8 CPU cores.
+**Stage 3 results:** `results/eval_V1.json`, `results/eval_V2.json`, `results/eval_V3.json`,
 `results/eval_summary.csv`, `results/run.log` (results commit `64c9798`; log commit `5f4abaa`).
-**Artifact:** `models/gold_lstm_stationary_v2.keras` + two scalers + metadata (not wired into
-the API or Streamlit).
+**Stage 4 protocol:** `docs/BACKTEST_PROTOCOL.md`, committed at `0cc0647` before the backtest.
+**Stage 4 run:** 2026-11-16, code commit `9b9caca`, inference only (no training).
+**Stage 4 results:** `results/backtest.json`, `results/backtest.log`.
+**Artifact:** `models/gold_lstm_stationary_v2.keras` + two scalers + metadata (seed 42; not
+wired into the API or Streamlit until Stage 5a).
 
 ---
 
@@ -139,6 +144,15 @@ pre-registered fallback to 3 seeds.
 
 The LSTM's hold-out R² is +0.000119 and its RMSE advantage is 0.000002 — a point estimate
 indistinguishable from zero, not a usable edge.
+
+**One-label caveat (found 2026-11-16, not fixed).** The stationary LSTM's early-stopping
+validation tail ends on 2025-09-30, and its target is the 2025-10-01 return — the first return
+of the hold-out period. That is 1 of 173 validation labels (+2.15% log, about 0.50% of the
+validation MSE about zero), used only for epoch selection. No hold-out feature row is in the
+fitting or validation rows, and the scalers are fit only through 2024-12-31. The same overlap
+applies to the seed-42 artifact used in Stage 4, so it affects the Stage 3 headline numbers and
+the backtest alike. The direction, if any, favors the model slightly; it cannot change the
+verdict. Full record: `docs/EVAL_PROTOCOL.md` §11 D-1.
 
 ### 2.3 Per-fold stability (V2, stationary LSTM and ridge-full)
 
@@ -545,3 +559,178 @@ tests/test_eval_protocol.py ...............                              [ 60%]
 test_pipeline.py ..............                                          [100%]
 ============================= 35 passed in 10.16s ==============================
 ```
+
+---
+
+## 11. Economic reality (Stage 4)
+
+**Protocol:** `docs/BACKTEST_PROTOCOL.md` (`0cc0647`), pre-registered before any backtest
+result. **Run:** `python -m src.backtest_check`, code `9b9caca`, 2026-11-16, inference only
+(no training). **Results:** `results/backtest.json`, `results/backtest.log`.
+
+### 11.1 What was tested
+
+- **Hold-out only:** 210 rows, 2025-10-01 → 2026-06-11; 210 close-to-close returns through the
+  2026-06-13 close.
+- **Predictions:** the committed **seed-42 artifact only**, by inference. Stage 3 saved
+  aggregate metrics but no per-row predictions, so per-seed and 5-seed tables are not
+  recoverable without retraining; they are dropped. Seed 42 was fixed before the Stage 3 run
+  (`PRIMARY_SEED = 42`, `8d7715e`), not chosen after seeing the hold-out.
+- **Strategies (long/flat, no shorting):** S0 buy-and-hold gold (Rial); S1 buy-and-hold USD
+  (Rial); S2 long iff `ŷ > μ_train`; S3 long iff `ŷ > 0`. `μ_train = 0.1561%` is the mean log
+  return over the 951 fitting rows (2021-08-28 → 2024-12-31).
+- **Costs per side:** C0 0%, C1 0.35% (0.7% round trip), C2 0.75% (1.5% round trip), C3 1.5%
+  (3% round trip). C2 is the pre-registered decision cost. The old `trading_bot/` backtest used
+  0.7% per side (1.4% round trip); C1 is half that, and C2/C3 follow the Stage 3 break-even
+  analysis (§5).
+- **Annualisation:** 252 days. **Bootstrap:** moving-block, block 10, 10,000 draws, seed
+  20261116, percentile 95% CI.
+
+### 11.2 Is the model still near-constant?
+
+| Hold-out statistic | Stage 3 5-seed mean | seed-42 artifact |
+|---|---:|---:|
+| n | 210 | 210 |
+| RMSE | 0.026543 | 0.026540 |
+| R² vs zero | +0.000119 | +0.000367 |
+| corr(pred, actual) | +0.0381 | +0.0312 |
+| std(pred) | 0.003304 | 0.002482 |
+| std(actual) | 0.026456 | 0.026456 |
+| mean(pred) | — | +0.0621% |
+| share pred > 0 | — | 59.0% |
+| share pred > `μ_train` | — | 33.8% |
+
+The model is still **near-constant**: prediction sd is **9.4%** of actual sd for seed 42 and
+**12.5%** for the 5-seed mean; correlation is +0.031 / +0.038. Seed 42 is **typical, not
+materially stronger**: its RMSE is 0.012% lower than the 5-seed mean (0.026540 vs 0.026543) and
+its R² is +0.000367 vs +0.000119, but its correlation is lower (+0.031 vs +0.038) and its
+predictions are less dispersed. All of these are statistically indistinguishable from zero; the
+backtest must not be read as a better model than the Stage 3 evaluation.
+
+Because the prediction varies slightly, S3 is **not** identical to buy-and-hold: it is long on
+124 of 210 days (59.0%), and S2 on 71 of 210 (33.8%). Each rule changes position 14 times.
+
+### 11.3 Total return by strategy and cost
+
+| Strategy | C0 0% | C1 0.35%/side | C2 0.75%/side | C3 1.5%/side |
+|---|---:|---:|---:|---:|
+| S0 buy-and-hold gold (Rial) | +57.89% | +57.34% | +56.71% | +55.52% |
+| S1 buy-and-hold USD (Rial) | +49.00% | +48.48% | +47.89% | +46.77% |
+| S2 LSTM `> μ_train` | +12.37% | +6.99% | +1.13% | -9.06% |
+| S3 LSTM `> 0` | +52.12% | +44.83% | +36.90% | +23.11% |
+
+The final equity multiple is 1 + the percentage (e.g. S3 at C2 = 1.3690).
+
+### 11.4 Full metrics at 0% and 0.75%/side
+
+At **C0 (0%)**:
+
+| Strategy | Total | Ann. return | Ann. vol | Max DD | Changes | Share long | Multiple |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| S0 | +57.89% | +73.00% | +41.61% | -19.47% | 1 | +100.0% | 1.5789 |
+| S1 | +49.00% | +61.38% | +30.12% | -13.63% | 1 | +100.0% | 1.4900 |
+| S2 | +12.37% | +15.02% | +30.16% | -24.43% | 14 | +33.8% | 1.1237 |
+| S3 | +52.12% | +65.43% | +33.85% | -23.56% | 14 | +59.0% | 1.5212 |
+
+At **C2 (0.75% per side, 1.5% round trip)**:
+
+| Strategy | Total | Ann. return | Ann. vol | Max DD | Changes | Share long | Multiple |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| S0 | +56.71% | +71.44% | +41.59% | -19.47% | 1 | +100.0% | 1.5671 |
+| S1 | +47.89% | +59.92% | +30.08% | -13.63% | 1 | +100.0% | 1.4789 |
+| S2 | +1.13% | +1.36% | +30.50% | -25.56% | 14 | +33.8% | 1.0113 |
+| S3 | +36.90% | +45.78% | +34.12% | -24.70% | 14 | +59.0% | 1.3690 |
+
+### 11.5 Bootstrap: difference in mean daily net return vs S0
+
+| Cost | S2 diff (bp/day) | 95% CI | S3 diff (bp/day) | 95% CI |
+|---|---:|---|---:|---|
+| C0 | -17.83 | [-40.54, -3.08] | -2.93 | [-18.31, +6.96] |
+| C1 | -19.99 | [-42.97, -5.31] | -5.09 | [-20.82, +4.55] |
+| C2 | -22.45 | [-45.45, -7.89] | -7.56 | [-23.96, +2.01] |
+| C3 | -27.06 | [-50.87, -12.29] | -12.19 | [-29.82, -2.38] |
+
+1 bp = 0.01%. S2 is significantly worse than S0 at every cost, including 0%. S3 is not
+distinguishable from S0 at C0–C2; at C3 it is significantly worse.
+
+### 11.6 One-day execution delay
+
+| Rule | C0 primary | C0 delay | C2 primary | C2 delay |
+|---|---:|---:|---:|---:|
+| S2 | +12.37% | +8.96% | +1.13% | -1.94% |
+| S3 | +52.12% | +53.84% | +36.90% | +38.46% |
+
+At C2 with the delay, S2's mean difference vs S0 is -23.93 bp/day, CI [-50.66, -5.19]; S3's is
+-6.90 bp/day, CI [-24.20, +4.11]. The delay does not change the verdict. S3's total is slightly
+higher with the delay (+38.46% vs +36.90% at C2) because the shifted series trades a different
+set of days; the difference is small and the comparison with S0 is still statistically
+indistinguishable.
+
+### 11.7 Gold in USD (currency-neutral reference)
+
+| Series | Total | Ann. return | Ann. vol | Max DD | Multiple |
+|---|---:|---:|---:|---:|---:|
+| Gold in USD (`Gold_IRR / USD_IRR`), gross | +5.97% | +7.20% | +26.95% | -23.78% | 1.0597 |
+| S0 nominal gold (Rial), gross | +57.89% | +73.00% | +41.61% | -19.47% | 1.5789 |
+| S1 USD (Rial), gross | +49.00% | +61.38% | +30.12% | -13.63% | 1.4900 |
+
+Nominal gold rose 57.9% while gold in USD rose 6.0%; the gap is the Rial's devaluation
+(USD/IRR +49.0%). **No inflation series exists in the repository.** Gold-in-USD is the available
+currency-neutral proxy, **not** an inflation-adjusted real return. The nominal strategy numbers
+are inflated by devaluation and must not be read as real purchasing-power gains.
+
+### 11.8 Verdict under the pre-registered rule
+
+Rule (`docs/BACKTEST_PROTOCOL.md` §7): at C2 (0.75%/side, 1.5% round trip), a strategy adds
+value only if its mean daily net return is higher than S0's **and** the 95% block-bootstrap CI
+for the difference excludes zero.
+
+| Candidate | Mean diff (bp/day) | 95% CI (bp/day) | Adds value? |
+|---|---:|---|---|
+| S2 | -22.45 | [-45.45, -7.89] | **No** — significantly worse |
+| S3 | -7.56 | [-23.96, +2.01] | **No** — CI includes zero |
+
+**Finding: no added value over buy-and-hold.** S2 destroys value; S3's point estimate is
+negative and its CI includes zero. Neither passes.
+
+### 11.9 Plain-language reading
+
+- **Why daily trading cannot pay 1.5% round-trip costs.** Each rule changes position 14 times
+  (about seven round trips). At C2 the simple sum is 14 × 0.75% ≈ 10.5% of notional; the
+  compounded effect is larger (15.2 points for S3, 11.2 for S2) because each cost is charged on
+  the then-current equity. S3 falls from +52.12% gross to +36.90% net; S2 from +12.37% to
+  +1.13%. At C3, S2 turns negative (-9.06%) and S3 keeps only +23.11%. The average absolute
+  daily move on the hold-out is 1.65% (§5), so a 1.5% round trip is about **one day's average
+  move**; a rule that trades 14 times pays that average move seven times over.
+- **What the nominal uptrend does to any long-biased rule.** S0 is a hard benchmark. S3 is long
+  59% of days and ends 5.8 points behind S0 gross (52.12% vs 57.89%); costs take another 15.2
+  points. S2 is long only 34% and ends 45.5 points behind gross; it is significantly worse than
+  S0 even before costs. Any long-biased rule inherits the trend; none of this is timing skill.
+- **What the numbers cannot tell us.** Whether another threshold, horizon, asset or venue would
+  work (not tested; post-hoc search is out of scope); whether the model has a tiny, undetectable
+  edge (Stage 3 says "no demonstrated edge", not "proven no edge"); whether inflation-adjusted
+  returns are positive (no CPI series; gold-in-USD is the proxy); anything about future
+  performance. The sample is 210 rows in one strongly trending regime, so the power to detect a
+  small edge is low.
+
+### 11.10 The one-label overlap and the touch count
+
+- The Stage 3 stationary LSTM hold-out headline and the seed-42 artifact both used an
+  early-stopping validation tail whose last label is the 2025-10-01 return (1 of 173 labels,
+  +2.15%, about 0.50% of validation MSE). No hold-out feature row is in fitting or validation,
+  and the scalers are fit only through 2024-12-31. The overlap can only favor the model
+  slightly; it cannot change the verdict. Full record: `docs/EVAL_PROTOCOL.md` §11 D-1.
+- **Touch count:** Stage 3 scored the hold-out three times (V1/V2/V3) and the artifact code
+  predicted it once without scoring. Stage 4 added two inference-only passes (a development run
+  and the final run, identical outputs). Total **six prediction passes, three scored**, none
+  re-run after a result.
+
+### 11.11 Reproduce
+
+```bash
+.venv/bin/python -m src.backtest_check
+PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
+  /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q
+```
+
+Tests: **44 passed** (9 new backtest tests + 35 existing).
