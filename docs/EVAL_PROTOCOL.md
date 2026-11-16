@@ -311,8 +311,44 @@ observed directional accuracy (or 100%), the cost hurdle is stated plainly.
 
 ## 11. Deviations
 
-**No post-run deviations.** The only change made after the first commit was the pre-run
-hold-out amendment recorded in §5.1 (`cb75162`), made before any model fit. The global-series
-construction in §2.3 was part of the pre-registration, not a post-hoc change. The implementation
-file names and the `make eval` / `scripts/check_eval.py` substitution are recorded in
-`docs/RESULTS.md` §8 and `docs/PLAN.md` Stage 3.
+**One post-run deviation, found on 2026-11-16 during the Stage 4 artifact audit.** The only
+change made before the run was the pre-run hold-out amendment recorded in §5.1 (`cb75162`), made
+before any model fit. The global-series construction in §2.3 was part of the pre-registration,
+not a post-hoc change. The implementation file names and the `make eval` /
+`scripts/check_eval.py` substitution are recorded in `docs/RESULTS.md` §8 and `docs/PLAN.md`
+Stage 3.
+
+### D-1 — one validation label is a hold-out return (found 2026-11-16, not fixed)
+
+§5.1 promised that "no scaler, fold boundary, early-stopping epoch or model choice uses hold-out
+rows." That promise is violated by **one label** at the hold-out boundary.
+
+- **What happened.** The pre-hold-out frame ends on **2025-09-30**. `split_fit_val` puts the
+  last 173 pre-hold-out rows (2025-02-08 → 2025-09-30) in the LSTM early-stopping tail. The
+  target of the last of those rows is the **2025-10-01 return** — the first return of the
+  hold-out period. The gap between the validation tail and the hold-out is therefore **0 rows**,
+  one row short of the 1 row needed to keep the label out.
+- **What it did not touch.** No hold-out **feature row** appears in the fitting rows or the
+  validation rows (0 of 210). The scalers are fit only on the 951 fitting rows
+  (2021-08-28 → 2024-12-31). The model weights are not fit on the leaked label; the only channel
+  is `val_loss` early stopping (`restore_best_weights=True`), i.e. epoch selection.
+- **Size.** 1 of 173 validation labels (0.58%). The label is +2.1548% (log return). Its squared
+  value is **0.4982%** of the validation MSE measured about zero. The validation set's mean is
+  +0.3147% and its standard deviation 2.2995%.
+- **Scope.** The same `split_fit_val(np.arange(len(pre)))` call produced the hold-out models for
+  all three variants, so the same single label was in the early-stopping tails of every
+  stationary-LSTM and legacy-LSTM hold-out fit in Stage 3 (18 LSTM fits), not only in the final
+  seed-42 artifact.
+- **Fold boundaries are clean.** Checked read-only on the five V2 stationary folds: the last
+  validation target is 36 rows before the first test row (purge 30 + embargo 5 + 1), so **0 of 5**
+  fold boundaries are affected.
+- **Direction and bound.** Hold-out information can only make the model look better, not worse;
+  the leaked label is a large positive move (+2.15%) and the hold-out is a rising sample. The
+  effect is confined to epoch selection and is far too small to create the observed null's
+  opposite: the stationary LSTM's hold-out R² is +0.0001 with a 95% CI of
+  [−0.0577, +0.0630], and it fails the DM condition (p = 0.4984) and the bootstrap condition by
+  wide margins. **The verdict "no demonstrated edge" is unchanged.**
+- **What was not done.** No re-run, no retraining, no re-split. Fixing the boundary would require
+  a new artifact and a new hold-out evaluation, which the GATE 3 decision rules out. Stage 4's
+  backtest uses the committed seed-42 artifact as-is and records the overlap again in
+  `docs/BACKTEST_PROTOCOL.md` and `docs/RESULTS.md`.
