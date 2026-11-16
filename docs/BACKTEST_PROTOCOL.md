@@ -111,14 +111,15 @@ Within that single run the hold-out was:
 - **18 LSTM hold-out fits** in total (V1: 5 stationary; V2: 5 stationary + 3 legacy; V3: 5
   stationary) plus 1 artifact fit = **19 LSTM fits that produced hold-out predictions**.
 
-This stage adds **one inference-only pass** (0 fits) of the seed-42 artifact.
+This stage adds **inference-only passes** (two in practice: a development run before the code
+commit and the final run after it; see §10). No fitting is done, and the two passes produced
+identical predictions and identical tables.
 
 So the pre-registered promise "touched once" is **not literally true**: the hold-out was
 scored three times in one run, predicted once more by the artifact code, and is now predicted
-once more by inference. What did *not* happen is a result-dependent re-run: V1/V2/V3 were
-pre-registered sensitivity variants, not repeated attempts to find a better number, and no
-evaluation was re-run after its result was seen. The count is stated here and in
-`docs/RESULTS.md`.
+by inference. What did *not* happen is a result-dependent re-run: V1/V2/V3 were pre-registered
+sensitivity variants, not repeated attempts to find a better number, and no evaluation was
+re-run after its result was seen. The count is stated here and in `docs/RESULTS.md`.
 
 ---
 
@@ -279,7 +280,23 @@ the expected outcome.
 
 ---
 
-## 10. Deviations
+## 10. Run record and deviations
+
+### Run record (2026-11-16)
+
+- **Protocol commit:** `0cc0647` (this file), **code commit:** `9b9caca`
+  (`src/backtest_check.py`, `tests/test_backtest_check.py`).
+- **Results:** `results/backtest.json`, `results/backtest.log`.
+- **Hold-out prediction passes:** Stage 3 produced hold-out predictions in three scored
+  variant passes plus one unscored artifact pass (19 LSTM fits). Stage 4 added **two
+  inference-only passes**: a development run before the code commit and the final run after
+  it. The two produced identical predictions and identical strategy tables; there was no
+  fitting and no result-dependent choice between them. Total: **six prediction passes, three
+  scored**, all three scored in the single Stage 3 run.
+- **Deviations:** none. The seed-42-only amendment was agreed before this file was committed;
+  the extra inference pass is a run detail, not a method change.
+
+### Deviations
 
 **None at pre-registration.** The prediction-source amendment (seed-42 artifact only; per-seed
 and 5-seed tables dropped; touch count stated in §2.4) was agreed by the owner **before** this
