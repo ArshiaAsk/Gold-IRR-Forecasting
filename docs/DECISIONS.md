@@ -341,6 +341,96 @@ The README is not rewritten in Stage 3.
 
 ---
 
+## D25 — GATE 3 accepted: "no demonstrated edge" is final
+
+**Date:** 2026-11-16 · **Status:** accepted · **Owner decision**
+
+The verdict **"no demonstrated edge"** is final for this project. There will be **no further
+model tuning, no new features and no new architectures**. Any extra search after seeing the
+hold-out would be post-hoc and is out of scope.
+
+The optional same-day global sensitivity stays **unrun**. It was allowed only as a labelled
+sensitivity in `docs/EVAL_PROTOCOL.md`; it is not part of the headline and cannot change the
+verdict.
+
+**Consequence:** Stage 4 is not a model search. It is an accounting exercise on the predictions
+that already exist, so the README can state the economic conclusion with numbers. The negative
+result is the deliverable.
+
+---
+
+## D26 — `trading_bot/` is replaced by the economic-reality analysis; Stage 5 splits into 5a/5b
+
+**Date:** 2026-11-16 · **Status:** accepted · **Executed in Stage 4**
+
+`trading_bot/` is removed from the working tree with `git rm`; the annotated tag
+`legacy-pre-refactor` preserves it. Before deletion, kept code was grepped for imports: no
+module under `src/`, `config/`, `tests/`, `streamlit_app.py` or `test_pipeline.py` references
+`trading_bot`. Only the old `README.md` still describes it, and the README is rewritten in 5b.
+
+It is replaced by a small **economic-reality analysis**: `src/backtest_check.py` reads the saved
+predictions/artifact and prices, applies S0–S3 with the pre-registered costs, and writes
+`results/backtest.json` + a log. It is not a live strategy and makes no trading claim.
+
+**Stage 5 is split:**
+
+- **5a — serving:** API and Streamlit rewired to the stationary model, with **one feature
+  function shared by training and serving**.
+- **5b — reproducibility and docs:** Docker, CI, `Makefile`/scripts, final README.
+
+**Consequence:** the repository no longer contains a live bot, an execution layer or a backtest
+that can be mistaken for a product. The economics are measured, not asserted.
+
+---
+
+## D27 — Stage 4 evaluates the seed-42 artifact only; per-seed tables are dropped
+
+**Date:** 2026-11-16 · **Status:** accepted · **Executed in Stage 4**
+
+Stage 3 saved **aggregate metrics only** (`results/eval_V*.json` has RMSE, R², DM, bootstrap
+CIs, `std_pred`, `std_actual`, `corr` — no per-row predictions). The only persisted model is the
+committed **seed-42 artifact**. Stage 4 therefore evaluates that artifact by **inference only**
+and drops the requested per-seed and 5-seed backtest tables; reproducing them would require
+re-running the fits, which is prohibited.
+
+Seed 42 was fixed **before** the Stage 3 run (`PRIMARY_SEED = 42` in `src/evaluate.py`,
+committed at `8d7715e` before the results commit), so this is not best-seed selection. It is
+also the model Stage 5a will serve.
+
+**Hold-out touch count (verified from `results/run.log` and the git history):** Stage 3 scored
+the hold-out three times (V1/V2/V3) and the artifact code predicted it once without scoring
+(19 LSTM hold-out fits in one run). Stage 4 added two inference-only passes (a development run
+and the final run; identical outputs, no fitting). Total **six prediction passes, three
+scored**, none re-run after a result. The pre-registered "touched once" was therefore not
+literally met; this is stated in `docs/BACKTEST_PROTOCOL.md` §2.4 and `docs/RESULTS.md` §11.10.
+
+**Consequence:** the backtest is a single-model check, not a seed-robustness check. The seed-42
+hold-out RMSE/R²/corr are reported next to the Stage 3 5-seed headline; seed 42 is typical, not
+stronger (`docs/RESULTS.md` §11.2).
+
+---
+
+## D28 — One validation label is a hold-out return; recorded, not fixed
+
+**Date:** 2026-11-16 · **Status:** accepted · **Found in the Stage 4 artifact audit**
+
+The last pre-hold-out validation row (2025-09-30) has the **2025-10-01 return** as its target,
+so one hold-out-period label entered `val_loss` early stopping. It is 1 of 173 validation
+labels (+2.15% log, about 0.50% of the validation MSE about zero). No hold-out **feature row**
+is in fitting or validation, and the scalers are fit only on the 951 fitting rows
+(2021-08-28 → 2024-12-31). The five walk-forward fold boundaries are clean: the last validation
+target is 36 rows before the first test row.
+
+The overlap can only **favor** the model slightly; it cannot change the verdict. It was **not**
+fixed: no retraining, no re-split, no re-run. It is recorded in `docs/EVAL_PROTOCOL.md` §11 D-1,
+`docs/RESULTS.md` §2.2 and §11.10, and `docs/BACKTEST_PROTOCOL.md` §2.3.
+
+**Consequence:** the Stage 3 hold-out headline and the Stage 4 backtest carry the same caveat.
+The honest conclusion is unchanged: the stationary LSTM has no demonstrated edge, and the
+long/flat rules add no value over buy-and-hold after costs.
+
+---
+
 ## Open decisions
 
 These are the owner's calls. Each names the stage it blocks.

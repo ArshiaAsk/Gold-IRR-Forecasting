@@ -1,7 +1,7 @@
 # Project State
 
-**Date:** 2026-11-14
-**Stage:** Stage 3 complete. Honest evaluation run, artifact committed, **stopped at GATE 3**. No README/API/Streamlit/Dockerfile/trading_bot changes; Stage 4 not started.
+**Date:** 2026-11-16
+**Stage:** Stages 3 and 4 complete. GATE 3 accepted ("no demonstrated edge" final); Stage 4 economic reality complete, **stopped at GATE 4**. `trading_bot/` removed. Stage 5 split into **5a (serving)** and **5b (reproducibility, Docker, CI, README)**, not started.
 **Branch:** `refactor/honest-portfolio`
 **Baseline tag:** `legacy-pre-refactor` → `d1670cc` (annotated)
 **Pre-refactor description:** `docs/AUDIT_REPORT.md` (2026-11-13)
@@ -79,18 +79,30 @@
 - **Artifact.** `models/gold_lstm_stationary_v2.keras` + `models/scaler_X_stationary_v2.pkl` + `models/scaler_y_stationary_v2.pkl` + `models/gold_lstm_stationary_v2.metadata.json`, trained on V2 pre-hold-out rows (fit 2021-08-28 → 2024-12-31, validation 2025-02-08 → 2025-09-30, seed 42). Not wired into the API or Streamlit; `models/gold_lstm_v2.keras` remains for the API.
 - **Results files.** `results/eval_V1.json`, `results/eval_V2.json`, `results/eval_V3.json`, `results/eval_summary.csv`, `results/run.log`. Full tables and interpretation in `docs/RESULTS.md`.
 
+### Stage 4 — economic reality (`1e3e634`, `0cc0647`, `9b9caca`, `cf09f8d`, `3b5ac3a`)
+
+- **Protocol pre-registered** in `docs/BACKTEST_PROTOCOL.md` (`0cc0647`) before any backtest result: hold-out only, seed-42 artifact by inference, S0–S3, four cost scenarios, moving-block bootstrap, fixed decision rule.
+- **Prediction source.** Stage 3 saved aggregate metrics only; no per-row predictions. Stage 4 evaluates the committed seed-42 artifact by inference, with no training. Per-seed and 5-seed backtest tables are not recoverable and are dropped (D27).
+- **Artifact audit.** Fit 2021-08-28 → 2024-12-31 (951), validation 2025-02-08 → 2025-09-30 (173), hold-out 2025-10-01 → 2026-06-11 (210). No hold-out feature row is in fit or validation; scalers are fit only through 2024-12-31. One validation label (2025-09-30 target = 2025-10-01 return, +2.15%, about 0.50% of validation MSE) entered early stopping; recorded as `docs/EVAL_PROTOCOL.md` §11 D-1, not fixed (D28).
+- **Run.** `.venv/bin/python -m src.backtest_check`, code `9b9caca`, 2026-11-16, inference only. Two inference-only passes (development + final) produced identical results; Stage 3 scored the hold-out three times and predicted it once unscored. Total six prediction passes, three scored.
+- **Verdict: no added value over buy-and-hold.** At C2 (0.75%/side): S0 +56.71%, S1 +47.89%, S2 +1.13%, S3 +36.90%. S2 diff −22.45 bp/day, CI [−45.45, −7.89] (significantly worse); S3 diff −7.56 bp/day, CI [−23.96, +2.01] (no value). At C0: S0 +57.89%, S1 +49.00%, S2 +12.37%, S3 +52.12%.
+- **Prediction spread.** Seed-42 hold-out `std_pred` 0.002482 vs `std_actual` 0.026456 (9.4%), corr +0.031, RMSE 0.026540, R² +0.000367. The Stage 3 5-seed headline is `std_pred` 0.003304, corr +0.0381, RMSE 0.026543, R² +0.000119. Seed 42 is typical, not stronger; the model is still near-constant.
+- **Gold in USD.** +5.97% over the traded period vs +57.89% nominal gold; USD/IRR +49.0%. No inflation series exists; gold-in-USD is the currency-neutral proxy, not a real return.
+- **`trading_bot/` removed** with `git rm`; no kept code imported it; the tag preserves it (D26). `src/backtest_check.py` + 9 tests; **44 tests pass**.
+- **Results files.** `results/backtest.json`, `results/backtest.log`. Full tables and plain-language reading in `docs/RESULTS.md` §11.
+
 ## Next
 
-**GATE 3 — owner reviews `docs/RESULTS.md`.** The pre-registered verdict is **no demonstrated edge**. If the owner confirms the framing, Stage 4 is the no-edge / cost-hurdle analysis (`docs/NO_EDGE.md`) or a defensible out-of-sample backtest, per the Stage 4 decision. The README is not rewritten until Stage 5.
+**GATE 4 — owner reviews the Stage 4 economic reality.** The pre-registered finding is **no added value over buy-and-hold**. If accepted, Stage 5a (serving: API + Streamlit rewired to the stationary model, one feature function) and 5b (reproducibility, Docker, CI, README) follow. No README/API/Streamlit/Dockerfile changes until then.
 
 ## Blockers
 
-None. G1-final is resolved by D19; O1–O8 are resolved as D10–D17; Stage 3 is complete.
+None. G1-final is resolved by D19; O1–O8 are resolved as D10–D17; Stage 3 and Stage 4 are complete.
 
 ## Known stale artifacts
 
-- `README.md` is still the pre-refactor document. It describes components deleted in Stage 2b, quotes metrics that contradict the artifacts, and labels Rial as Toman. **Do not quote it.** Stage 5 rewrites it; Stage 3 supplies the numbers, including the three data variants required by D19.
-- `models/gold_lstm_v2.keras` is the pre-refactor model. It is still tracked so the API has something to load. Stage 3 did **not** replace it; the new primary artifact is `models/gold_lstm_stationary_v2.keras` + its scalers + metadata, and it is not wired into the API or Streamlit.
+- `README.md` is still the pre-refactor document. It describes components deleted in Stage 2b, quotes metrics that contradict the artifacts, labels Rial as Toman, and still documents `trading_bot/` (removed in Stage 4). **Do not quote it.** Stage 5b rewrites it; Stages 3 and 4 supply the numbers, including the three data variants required by D19 and the economic table.
+- `models/gold_lstm_v2.keras` is the pre-refactor model. It is still tracked so the API has something to load. Stages 3 and 4 did **not** replace it; the new primary artifact is `models/gold_lstm_stationary_v2.keras` + its scalers + metadata, and Stage 5a wires it into the API and Streamlit.
 - `notebooks/` are kept as history. They import `catboost`, `lightgbm`, `xgboost` and `statsmodels`, which are **not** installed by `requirements.txt` (listed there as optional comments).
 
 ---
@@ -175,6 +187,21 @@ Everything below was produced by a command in this session. Nothing here is copi
 | Run time **1,259.6 s (21.0 min)**; **109** LSTM fits | run log; `results/eval_*.json` metadata |
 | Tests: **35 passed** (15 protocol + 6 date-shift + 14 pipeline) | pytest output, `docs/RESULTS.md` §9 |
 | Artifact: 35,489 params, input `(None, 30, 23)`, seed 42 | `models/gold_lstm_stationary_v2.keras` + metadata |
+
+### Stage 4 verified facts
+
+| Fact | How verified |
+|---|---|
+| Protocol committed before any backtest result | `git log -- docs/BACKTEST_PROTOCOL.md` (`0cc0647`); code commit `9b9caca` |
+| Hold-out predictions: seed-42 artifact only, inference; no training | `src/backtest_check.py`; `results/backtest.json` metadata |
+| Seed-42 HO: RMSE **0.026540**, R² **+0.000367**, corr **+0.0312**, std_pred **0.002482** vs std_actual **0.026456** | `results/backtest.json` |
+| Stage 3 5-seed HO: RMSE **0.026543**, R² **+0.000119**, corr **+0.0381**, std_pred **0.003304** | `results/eval_V2.json` |
+| S0/S1/S2/S3 at C2: **+56.71% / +47.89% / +1.13% / +36.90%** | `results/backtest.json` |
+| S2 vs S0 at C2: **−22.45 bp/day**, CI **[−45.45, −7.89]**; S3: **−7.56 bp/day**, CI **[−23.96, +2.01]** | same |
+| Gold in USD **+5.97%** vs nominal gold **+57.89%**; USD/IRR **+49.00%** | same |
+| Finding: **no added value over buy-and-hold** | same → `verdict` |
+| `trading_bot/` removed; no kept imports | `git ls-files | grep trading_bot` empty; grep of `src/`, `tests/`, `streamlit_app.py` |
+| Tests: **44 passed** (9 backtest + 35 existing) | pytest output |
 
 ## Stage 2b acceptance outputs
 
@@ -275,7 +302,7 @@ Stated plainly so nobody mistakes these for measured facts:
 
 - Model architecture (64→32→16, 33,441 params), the log-return R² of −0.0016, and the Diebold–Mariano result are **audit-reported**. Stage 3 re-derives the first two.
 - `python -m unittest test_pipeline` reportedly runs 14 tests successfully (audit §5.6). Not re-run here.
-- The backtest has not been re-executed; only the committed JSON was read.
+- The old `trading_bot/` backtest was not re-executed; only its committed JSON was read before the directory was removed. The Stage 4 backtest in `results/backtest.json` was executed in this session.
 - The **mechanism** of the 2023-10 block is still **inferred**, not observed at the source. Stage 1b verifies that the block's rows are one day early relative to `GC=F`; it does not observe TGJU's internal intent. No external archive of an individual date inside the block was available.
 - `Ounce_USD` matches Yahoo `GC=F` on only 38/835 overlapping dates (max diff 53.4 on ≈ $4,000). Cause **unknown**; most likely a different Yahoo vintage. Does not affect any date conclusion.
 

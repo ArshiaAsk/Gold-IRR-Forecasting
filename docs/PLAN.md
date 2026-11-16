@@ -1,6 +1,7 @@
 # Refactor Plan — Honest Portfolio Piece (B-lite)
 
-**Status:** Stages 0–2b complete · **Branch:** `refactor/honest-portfolio` · **Baseline tag:** `legacy-pre-refactor` (→ `d1670cc`)
+**Status:** Stages 0–4 complete; Stage 5 split into **5a (serving)** and **5b (reproducibility,
+Docker, CI, README)**, both pending · **Branch:** `refactor/honest-portfolio` · **Baseline tag:** `legacy-pre-refactor` (→ `d1670cc`)
 **Source of truth for the "before" state:** `docs/AUDIT_REPORT.md` (2026-11-13, read-only audit of `d1670cc`)
 
 ## Stage log
@@ -13,9 +14,10 @@
 | G1-final | done | — | **D19: apply the +1 relabel** (owner) |
 | 2a | done | `d5b8dcd`, `75c927e` | reversible date correction + tests + verification |
 | 2b | done | `147d58b`, `5c6a74a`, `66b2353` | scope reduction, minimal API, repo hygiene |
-| 3 | done | `798981a`, `cb75162`, `37585ac`, `8d7715e`, `64c9798`, `5f4abaa` | no demonstrated edge; V1/V2/V3 sensitivity; artifact committed |
-| 4 | pending | — | backtest or no-edge analysis |
-| 5 | pending | — | reproducibility + docs |
+| 3 | done | `798981a`, `cb75162`, `37585ac`, `8d7715e`, `64c9798`, `5f4abaa` | no demonstrated edge; GATE 3 accepted; verdict final |
+| 4 | done | `1e3e634`, `0cc0647`, `9b9caca`, `cf09f8d`, `3b5ac3a` | economic reality: no added value over buy-and-hold; `trading_bot/` removed |
+| 5a | pending | — | serving: API + Streamlit rewired; one feature function |
+| 5b | pending | — | reproducibility, Docker, CI, README |
 
 ---
 
@@ -90,7 +92,7 @@ Additionally: every number printed in `docs/DATA_INTEGRITY.md` appears verbatim 
 ### Keep
 - `src/data_loader.py`, `src/feature_eng.py`, `src/data_preprocessor.py`, `src/model_builder.py`, `src/model_evaluator.py`, `src/train_pipeline.py`
 - A minimal API: `/health`, `/model-info`, `/predict` (rewritten on top of `src/api/`)
-- `config/`, `streamlit_app.py`, `Dockerfile`, `trading_bot/` (kept until Stage 4), `notebooks/`, tests that actually run
+- `config/`, `streamlit_app.py`, `Dockerfile`, `trading_bot/` (kept until Stage 4, then removed), `notebooks/`, tests that actually run
 
 ### Delete (preserved in `legacy-pre-refactor`)
 - `api_layer/` live trading bot (scale bug at `api_layer/live_predictor.py:257`, stale-history corruption, Open-vs-Close mismatch)
@@ -104,11 +106,11 @@ Additionally: every number printed in `docs/DATA_INTEGRITY.md` appears verbatim 
 - [x] Remove the components; confirm each is still reachable at `legacy-pre-refactor`.
 - [x] Rewrite `requirements.txt` from the actual imports of the *kept* code.
 - [ ] Track `models/scaler_X.pkl` / `scaler_y.pkl` — **deferred to Stage 3**, which regenerates and commits model + scalers together (owner's Stage 2b instruction).
-- [ ] Add `scripts/check_deps.py` and a `Makefile` — **deferred to Stage 5**; not in the owner's Stage 2b scope.
+- [ ] Add `scripts/check_deps.py` and a `Makefile` — **deferred to Stage 5b**; not in the owner's Stage 2b scope.
 - [x] Untrack generated artifacts and fix `.gitignore` so tracked/ignored policy is consistent.
 
 ### Deliverables
-Slim tree; `requirements.txt` that installs; `data/sample/`; this plan updated. (`Makefile`, `scripts/check_deps.py` and `docs/SCOPE.md` were dropped from the Stage 2 scope by the owner's instruction; Stage 5 covers the Makefile and dependency checks.)
+Slim tree; `requirements.txt` that installs; `data/sample/`; this plan updated. (`Makefile`, `scripts/check_deps.py` and `docs/SCOPE.md` were dropped from the Stage 2 scope by the owner's instruction; Stage 5b covers the Makefile and dependency checks.)
 
 ### Executed — Stage 2a (`d5b8dcd`, `75c927e`) and 2b (`147d58b`, `5c6a74a`, `66b2353`)
 - [x] Reversible +1 relabel for 2023-10-27 → 2025-08-06 in `DataLoader.get_tgju_history`, window/flag in `config/settings.py`, row count logged every run.
@@ -167,7 +169,7 @@ PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
   /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q   # 35 passed
 ```
 
-The old `make eval` / `scripts/check_eval.py` acceptance text was a Stage 5 deliverable (Makefile
+The old `make eval` / `scripts/check_eval.py` acceptance text was a Stage 5b deliverable (Makefile
 and scripts); the runnable entry point above is the Stage 3 deliverable. The old file names
 (`src/features_stationary.py`, `src/walkforward.py`, `scripts/run_eval.py`, `reports/`) were
 superseded by `src/feature_eng.py::add_stationary_features`, `src/eval_data.py`,
@@ -177,49 +179,104 @@ superseded by `src/feature_eng.py::add_stationary_features`, `src/eval_data.py`,
 **Owner reviews the results before any narrative is written.** If the edge is still zero, the plan
 continues as a negative result — but the owner confirms the framing first. **Stage 3 stops here.**
 
+### GATE 3 decision (2026-11-16) — accepted
+
+The verdict **"no demonstrated edge" is final**. No further model tuning, new features or new
+architectures; any extra search after seeing the hold-out would be post-hoc and is out of scope.
+The optional same-day global sensitivity stays **unrun**. `trading_bot/` is replaced by the
+Stage 4 economic-reality analysis (D26), and Stage 5 is split into 5a serving and 5b
+reproducibility/docs. Recorded as D25–D28 in `docs/DECISIONS.md`.
+
 ---
 
-## Stage 4 — Honest backtest or replacement
+## Stage 4 — Economic reality (executed)
 
-**Goal:** either a defensible out-of-sample backtest, or a documented explanation of why no edge exists.
+**Goal:** quantify what a daily long/flat rule driven by the Stage 3 predictions would have
+earned on the hold-out, after costs, against buy-and-hold gold and USD — so the README can
+state the economic conclusion with numbers. This is **not** a search for a profitable strategy.
 
-### If kept
-- [ ] Out-of-sample only — trades start no earlier than the first walk-forward test date.
-- [ ] Round-trip costs 1.5–3%, stated explicitly in the report (audit: current model is 0.7%/side with no spread).
-- [ ] Benchmarks: buy-and-hold gold **and** buy-and-hold USD, always displayed next to the strategy.
-- [ ] The strategy is labelled by what it actually trades on. If it is a momentum rule, it says "momentum", not "AI".
+### Executed — Stage 4 (`1e3e634`, `0cc0647`, `9b9caca`, `cf09f8d`, `3b5ac3a`)
+- [x] `docs/BACKTEST_PROTOCOL.md` pre-registered and committed (`0cc0647`) before any result:
+      hold-out only, seed-42 artifact by inference, S0–S3, four cost scenarios, block bootstrap,
+      fixed decision rule.
+- [x] `src/backtest_check.py` + `tests/test_backtest_check.py`: 9 tests (cost on each change,
+      flat→flat free, no lookahead, S0 compounded product, one-day delay shift).
+- [x] `results/backtest.json`, `results/backtest.log`: full strategy × cost table, bootstrap
+      CIs, delay sensitivity, gold-in-USD reference, prediction spread.
+- [x] `trading_bot/` removed with `git rm`; no kept code imported it; the tag preserves it.
+- [x] **Finding: no added value over buy-and-hold.** At 0.75%/side, S2 = +1.13% vs S0 = +56.71%
+      (diff −22.45 bp/day, CI [−45.45, −7.89]); S3 = +36.90% vs S0 (diff −7.56 bp/day, CI
+      [−23.96, +2.01]). S2 is significantly worse; S3 is not distinguishable from S0 but does
+      not beat it. Full tables in `docs/RESULTS.md` §11.
+- [x] Prediction spread: seed-42 `std_pred` 0.002482 vs `std_actual` 0.026456 (9.4%), corr
+      +0.031; the model is still near-constant. Seed 42 is typical, not stronger than the Stage 3
+      5-seed mean.
+- [x] One-label validation/hold-out overlap recorded as a deviation (`docs/EVAL_PROTOCOL.md`
+      §11 D-1); no retraining, verdict unchanged.
 
-### If replaced
-- [ ] `docs/NO_EDGE.md`: the evidence for why no edge exists, the cost hurdle required to overcome it, and what would have to be true for a signal to be plausible.
+### Acceptance criterion (as executed)
+```bash
+.venv/bin/python -m src.backtest_check        # exits 0; writes results/backtest.json + log
+PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
+  /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q   # 44 passed
+```
+
+The old `make backtest` / `scripts/check_backtest.py` acceptance text belonged to a kept
+backtest; the owner replaced that with the economic-reality analysis. The old "If kept"
+checklist is satisfied where it applies: hold-out only, costs 0–3% stated, both benchmarks
+shown, and the rule is labelled by what it does (a long/flat threshold on the model's
+prediction, not "AI").
+
+---
+
+## Stage 5a — Serving
+
+**Goal:** make the stationary model the served model, with no train/serve feature skew.
+
+### Checklist
+- [ ] Rewire the API to `models/gold_lstm_stationary_v2.keras` + its two scalers; `/model-info`
+      reports the 23-feature stationary schema and sequence length 30.
+- [ ] Rewire Streamlit to the same artifact and the same feature function.
+- [ ] **One feature function** (`src/feature_eng.py::add_stationary_features`) is used by
+      training, evaluation, the API and Streamlit. No second implementation, no raw-level
+      fallback.
+- [ ] The API validates the real `(30, 23)` input and returns a log-return prediction; no
+      confidence interval, no fabricated noise.
+- [ ] Serving tests: the feature function is causal, the API schema matches the artifact
+      metadata, and a known input produces the same prediction as the offline path.
 
 ### Acceptance criterion (must be runnable)
 ```bash
-make backtest                 # exits 0 (if kept)
-python scripts/check_backtest.py
-# asserts: start_date >= first OOS date; round_trip_cost between 0.015 and 0.03;
-#          both benchmark keys present; no in-sample date range
+make api                                      # starts; /health 200
+curl -s localhost:8000/model-info             # 23 features, seq_len 30
+streamlit run streamlit_app.py                # starts and predicts
+pytest tests/ -q                              # green
 ```
 
 ---
 
-## Stage 5 — Reproducibility and documentation
+## Stage 5b — Reproducibility, Docker, CI, README
 
 ### Checklist
 - [ ] `make train`, `make test`, `make api` work from a clean clone.
-- [ ] Test suite green, including the 3 modules that fail collection today (`test_data_fetcher.py`, `test_live_predictor.py`, `test_live_signal_generator.py` — missing `yfinance` / import path).
 - [ ] Minimal GitHub Actions workflow: install, lint, test.
-- [ ] One-command Docker that actually builds (audit: current build did not finish in ~12 min; base image unpinned).
-- [ ] Final `README.md`: measured numbers only, units in **Rial**, a "Findings / Negative Result" section and a "Lessons Learned" section.
-- [ ] Delete the chat artifact at the current `README.md:600`.
+- [ ] One-command Docker that actually builds (audit: current build did not finish in ~12 min;
+      base image unpinned).
+- [ ] Final `README.md`: measured numbers only, units in **Rial**, the Stage 3 negative result,
+      the Stage 4 economic numbers, a "Findings / Negative Result" section and a "Lessons
+      Learned" section.
+- [ ] Delete the chat artifact at the current `README.md:600` and the `trading_bot/`
+      instructions (the directory is gone; the tag preserves it).
 
 ### Deliverables
-`Makefile`, `.github/workflows/ci.yml`, working `Dockerfile` + `docker-compose.yml`, final `README.md`, `docs/LESSONS.md`.
+`Makefile`, `.github/workflows/ci.yml`, working `Dockerfile` + `docker-compose.yml`, final
+`README.md`, `docs/LESSONS.md`.
 
 ### Acceptance criterion (must be runnable)
 ```bash
 make test && make train && make eval           # exits 0
 docker build -t gold-portfolio .               # exits 0
-python scripts/check_readme_numbers.py         # every number in README traces to a file in reports/
+python scripts/check_readme_numbers.py         # every number in README traces to a committed file
 ```
 
 ---
@@ -232,5 +289,6 @@ python scripts/check_readme_numbers.py         # every number in README traces t
 | 1 | Read-only investigation | **GATE 1** — fix data or document defect |
 | 2 | Deletion / restructuring | none |
 | 3 | Modeling + evaluation | **GATE 3** — review before narrative |
-| 4 | Backtest or no-edge analysis | none |
-| 5 | Repro + docs | none |
+| 4 | Economic reality (backtest on saved predictions) | none |
+| 5a | Serving (API + Streamlit) | none |
+| 5b | Repro + docs | none |
