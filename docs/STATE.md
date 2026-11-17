@@ -1,7 +1,7 @@
 # Project State
 
 **Date:** 2026-11-17
-**Stage:** Stages 3, 4 and 5a complete. GATE 3 accepted ("no demonstrated edge" final); GATE 4 accepted (D29: no added value over buy-and-hold, no re-runs, seed-42 artifact served); Stage 5a serving complete, **stopped at GATE 5a**. Stage 5b (reproducibility, Docker, CI, README) not started.
+**Stage:** Stages 3, 4, 5a and 5b complete. GATE 3 accepted ("no demonstrated edge" final); GATE 4 accepted (D29: no added value over buy-and-hold, no re-runs, seed-42 artifact served); GATE 5a accepted (D31); **stopped at GATE 5b** for owner review. No merge, no push, no release tag.
 **Branch:** `refactor/honest-portfolio`
 **Baseline tag:** `legacy-pre-refactor` → `d1670cc` (annotated)
 **Pre-refactor description:** `docs/AUDIT_REPORT.md` (2026-11-13)
@@ -103,29 +103,74 @@
 - **Footprint.** Streamlit + TensorFlow 2.20 + model + one prediction: **689 MB** peak RSS, **3.12 s** from import to prediction. Full AppTest run (all four tabs): **699 MB**, 3.2 s. Direct requirements total **2,345 MB** installed (TensorFlow alone 1,858 MB).
 - **Not changed:** `results/`, `models/`, `docs/EVAL_PROTOCOL.md`, `docs/BACKTEST_PROTOCOL.md`, `Dockerfile`, `README.md`. No retraining, no new seeds.
 
+### Stage 5b — reproducibility, packaging, CI and README (`e6f8210` … `13ce2c6`, `9aab948`)
+
+- **Release plan first.** `docs/RELEASE_PLAN.md` committed at `e6f8210` before any Stage 5b
+  change: deliverables, acceptance commands and the README outline.
+- **One test command.** Root `test_pipeline.py` moved to `tests/test_pipeline.py` (`d59dc34`);
+  plain `pytest` now collects **83 passed**. The old "44" was 30 tests under `tests/` plus 14
+  in the root file; plain `pytest` saw only 30 because `pytest.ini` sets `testpaths = tests`.
+  No test was added or removed by the move.
+- **Dependencies split** (`60e9870`): `requirements.txt` is the serving path with
+  `tensorflow-cpu==2.20.0`; `requirements-dev.txt` adds pytest, httpx, yfinance, curl_cffi,
+  matplotlib and seaborn. Python **3.12** is pinned in the Dockerfile and CI.
+- **Makefile** (`13ce2c6`): `install`, `test`, `check`, `evaluate`, `backtest`, `api`, `app`,
+  `docker-build`, `docker-run`, `fetch-data`, all documented in the README.
+  `scripts/fetch_data.py` is the TGJU/Yahoo entry point.
+- **Per-row predictions** (`539f92b`): opt-in `--save-predictions` plus `--out-dir`. A scratch
+  run under `/tmp` (one seed, one epoch) wrote 2,760 walk-forward and 1,050 hold-out rows and
+  did not touch `results/`. `docs/RESULTS.md` §12 records that the headline numbers predate the
+  flag.
+- **Docker** (`361b195`, `9aab948`): single image, Python 3.12 slim bookworm pinned by digest,
+  non-root UID 10001, healthcheck on `/health`, API default and Streamlit from the same image.
+  No raw data, tests, notebooks or legacy artifacts. Compose keeps one service and documents
+  port/auth/healthcheck. The HF Space port 7860 config is gone.
+- **CI** (`eed9ee0`): push/PR workflow, Python 3.12, pip cache, `requirements-dev.txt`,
+  `make check`.
+- **Hygiene** (`1cf8285`): MIT `LICENSE` (data excluded), `results/predictions/` ignored,
+  notebooks moved to `notebooks/exploratory/` with cleared outputs and a banner, legacy model
+  removed, absolute notebook path replaced.
+- **README** (`369f151`): rewritten from scratch, 319 lines, 58 marked numbers checked against
+  `results/*.json`; `docs/README_CLAIMS.md` records every claim and its verification.
+
 ## Next
 
-**Stage 5b — reproducibility, Docker, CI, README.** GATE 4 was accepted on 2026-11-17 (D29): the economic finding is final, no re-runs, and the committed seed-42 artifact is the served model. GATE 5a is the owner's review of this stage; Stage 5b starts only after it.
+**GATE 5b — owner review of the release.** The branch is complete and is **not** merged or
+pushed. The owner merges after review without squashing. No release tag has been created.
 
-### README checklist for Stage 5b (owner-mandated, D29)
+### README checklist for Stage 5b (owner-mandated, D29) — all present
 
-The final `README.md` must contain all four, in plain language:
-
-- [ ] **Touch count.** Six prediction passes over the hold-out, three of them scored; the pre-registered "touched once" was not literally met.
-- [ ] **Validation/hold-out overlap (D-1).** One validation label is the 2025-10-01 hold-out return (`docs/EVAL_PROTOCOL.md` §11 D-1, D28); recorded, not fixed.
-- [ ] **Nominal vs USD gold.** +57.89% nominal gold in IRR vs +5.97% gold in USD over the traded period (`results/backtest.json`); USD/IRR +49.0%.
-- [ ] **Hold-out shape.** ~210 rows of a trending nominal series; the metrics are not a claim about future performance.
+- [x] **Touch count.** Six prediction passes over the hold-out, three of them scored; the
+      pre-registered "touched once" was not literally met.
+- [x] **Validation/hold-out overlap (D-1).** One validation label is the 2025-10-01 hold-out
+      return (`docs/EVAL_PROTOCOL.md` §11 D-1, D28); recorded, not fixed, and its direction
+      favors the model slightly.
+- [x] **Nominal vs USD gold.** +57.89% nominal gold in IRR vs +5.97% gold in USD over the
+      traded period (`results/backtest.json`); USD/IRR +49.00%.
+- [x] **Hold-out shape.** ~210 rows of a trending nominal series; the metrics are not a claim
+      about future performance.
 
 ## Blockers
 
-None. G1-final is resolved by D19; O1–O8 are resolved as D10–D17; Stages 3, 4 and 5a are complete.
+None. G1-final is resolved by D19; O1–O8 are resolved as D10–D17; Stages 3, 4, 5a and 5b are
+complete. The only unresolved item is the owner's GATE 5b review.
 
 ## Known stale artifacts
 
-- `README.md` is still the pre-refactor document. It describes components deleted in Stage 2b, quotes metrics that contradict the artifacts, labels Rial as Toman, documents `trading_bot/` (removed in Stage 4) and shows the old `(30, 15)` API. **Do not quote it.** Stage 5b rewrites it; Stages 3–5a supply the numbers, including the three data variants required by D19, the economic table and the README checklist above.
-- `models/gold_lstm_v2.keras` and `models/scaler_X.pkl` / `scaler_y.pkl` are the pre-refactor artifacts. They are **no longer loaded by anything** — the API and Streamlit load `models/gold_lstm_stationary_v2.keras` and its two scalers. The old model is still tracked; removing it is a Stage 5b decision.
-- `notebooks/` are kept as history. They import `catboost`, `lightgbm`, `xgboost` and `statsmodels`, which are **not** installed by `requirements.txt` (listed there as optional comments).
-- `.streamlit/config.toml` pins port 7860 and disables CORS/XSRF for the old Hugging Face Space. It still overrides the port printed by `streamlit run`; Stage 5b owns it.
+Resolved in Stage 5b:
+
+- `README.md` was rewritten from measured results; it no longer describes removed components or
+  quotes pre-refactor metrics.
+- `models/gold_lstm_v2.keras` and the untracked `models/scaler_X.pkl` / `scaler_y.pkl` were
+  removed; the only tracked artifacts are the stationary model, its metadata and its two
+  scalers. The legacy files remain reachable at the tag.
+- `notebooks/` moved to `notebooks/exploratory/`, outputs cleared, a banner added and the
+  absolute local path replaced.
+- `.streamlit/config.toml` no longer pins port 7860 or disables CORS/XSRF for the old Hugging
+  Face Space; it carries the theme only.
+
+Untracked local directories (`mlruns/`, `mlflow/`, `logs/`, `data/raw/`, `data/processed/`,
+`data/*.db`) remain on disk and are ignored. They are not part of the repository.
 
 ---
 
@@ -143,12 +188,12 @@ Everything below was produced by a command in this session. Nothing here is copi
 | Processed dataset has **1,394** data rows | `wc -l data/processed/advanced_gold_features.csv` → 1,395 incl. header |
 | Repository had **129** commits at the start of Stage 0 (**138** at the end of Stage 2b) | `git rev-list --count HEAD` |
 | `.env` exists, is untracked, and is ignored at `.gitignore:28` | `git ls-files .env` (empty), `git check-ignore -v .env` |
-| `.github/` does not exist (no CI) | `ls -d .github` |
-| `Makefile` does not exist | `ls Makefile` |
-| `scripts/` does not exist | `ls -d scripts` |
+| `.github/workflows/ci.yml` exists (Stage 5b); there was no CI before | `ls .github/workflows` |
+| `Makefile` exists with 10 documented targets (Stage 5b); none before | `make help` |
+| `scripts/` exists: `fetch_data.py` and `check_readme_numbers.py` | `ls scripts` |
 | `docs/` contained only `AUDIT_REPORT.md` before Stage 0 | `ls docs` |
 | `docker-compose.yml` now defines exactly **one** service, `api` (was `ml-stack` before Stage 2b) | `grep -n "^  [a-z]" docker-compose.yml` |
-| Five model files are tracked: the stationary artifact + metadata + both stationary scalers, and the old `gold_lstm_v2.keras` | `git ls-files models/`; the old `models/scaler_X.pkl` / `scaler_y.pkl` exist on disk but are untracked and unused |
+| **Four** model files are tracked: the stationary artifact + metadata + both stationary scalers; the old `gold_lstm_v2.keras` was removed in Stage 5b | `git ls-files models/` |
 | `logs/test_metrics.json` reports price R² 0.9716991951320707, RMSE 4,840,916.90, MAE 2,883,359.74, MAPE 1.7017, log-return RMSE 0.0275036 — and **no** log-return R² field | `cat logs/test_metrics.json` (log file still on disk; `logs/` is ignored) |
 | `trading_bot/outputs/backtest_metrics.json` reported −12.034% return, Sharpe −7.361, max drawdown 15.105%, 30 trades, 40% win rate, benchmark +1,184.94%, period 2021-01-27 → 2025-12-20 (1,384 days) | read in Stage 0; the stale `trading_bot/outputs/` was deleted in Stage 2b |
 | `trading_bot/outputs/portfolio_log.csv` covered 2021-07-19 → 2026-06-11 (1,394 rows) and ended at 859,421,876.91 IRR — it did **not** match the committed metrics file's period | read in Stage 0; deleted in Stage 2b |
@@ -224,6 +269,13 @@ Everything below was produced by a command in this session. Nothing here is copi
 | Finding: **no added value over buy-and-hold** | same → `verdict` |
 | `trading_bot/` removed; no kept imports | `git ls-files | grep trading_bot` empty; grep of `src/`, `tests/`, `streamlit_app.py` |
 | Tests: **44 passed** (9 backtest + 35 existing) | pytest output |
+
+> **The "44 vs 30" ambiguity, resolved in Stage 5b.** The 44 was the count from the explicit
+> command `pytest tests/ test_pipeline.py`: **30** tests collected under `tests/` plus **14** in
+> the root `test_pipeline.py`. Plain `pytest` collected only **30**, because `pytest.ini` sets
+> `testpaths = tests`. Stage 5b moved the root file to `tests/test_pipeline.py`, so plain
+> `pytest` now collects every module: **83 passed** (79 before the two new Stage 5b test files).
+> No test was added or removed by the move.
 
 ### Stage 5a verified facts
 
@@ -483,6 +535,261 @@ not verify this limit from the repository; it is an assumption), 699 MB peak is 
 within** the limit but with little headroom, and the larger risk is the install: a 1.86 GB
 unpacked TensorFlow plus the rest of the stack. This is a measurement, not a migration plan;
 no framework change was made.
+
+> **Superseded in Stage 5b.** The "~1 GB, could not verify" assumption above was replaced by the
+> official limits quoted in *Stage 5b acceptance outputs* §2 (690 MB minimum, 2.7 GB maximum, as
+> of February 2024), and the footprint was re-measured. The conclusion did not change.
+
+## Stage 5b acceptance outputs
+
+All commands run on `refactor/honest-portfolio`, 2026-11-17, Python 3.12.3.
+
+### 1. Tests and the README check
+
+```bash
+.venv/bin/python -m pytest
+.venv/bin/python scripts/check_readme_numbers.py
+```
+
+```
+collected 83 items
+======================= 83 passed, 20 warnings in 11.66s =======================
+README number check passed: 58 marked numbers match results/*.json
+```
+
+Breakdown: 65 pre-existing tests under `tests/`, plus the 14 moved from the root
+`test_pipeline.py`, plus 2 prediction-export tests and 2 README-number tests. The move added no
+test. `pytest.ini` (`testpaths = tests`) now covers everything.
+
+### 2. Dependencies and footprint
+
+The clean-venv install of `requirements.txt` **failed on network timeouts**, not on dependency
+resolution:
+
+```bash
+python3 -m venv /tmp/rt-venv2
+/tmp/rt-venv2/bin/pip install -r requirements.txt
+```
+
+```
+ReadTimeoutError: HTTPSConnectionPool(host='files.pythonhosted.org', port=443): Read timed out.
+INSTALL_SECONDS=959.92          # first attempt
+INSTALL_SECONDS=393.60          # retry with PIP_DEFAULT_TIMEOUT=120
+```
+
+A resumable `wget` of the same wheel (`tensorflow_cpu-2.20.0-cp312...whl`, 259.0 MB) reached
+**82.9 MB at roughly 11 KB/s** before it was stopped. The clean-venv installed size and the
+`tensorflow-cpu` import time therefore **could not be measured**. The Docker build uses the same
+wheel and hit the same limit (below).
+
+Measured instead in the existing `.venv`, which has `tensorflow 2.20.0` (the CPU-only build on
+this host: `pip show tensorflow` lists no NVIDIA dependency). These are **not** `tensorflow-cpu`
+numbers and are labelled as such:
+
+| Stage | Peak RSS | Time |
+|---|---:|---:|
+| numpy + pandas | 94.9 MB | 0.28 s |
+| + streamlit | 125.2 MB | 0.18 s |
+| + tensorflow 2.20.0 | 640.7 MB | 2.07 s |
+| + model and scalers | 654.2 MB | 0.23 s |
+| + one prediction from the 200-row sample | 674.5 MB | 0.34 s |
+| full `AppTest` run, all four tabs | **686.8 MB** | **3.04 s** |
+
+`/usr/bin/time -v` reports 690,812 KB (674.5 MB) maximum RSS for the prediction run and
+703,284 KB (686.8 MB) for the AppTest. The served log return matches the API exactly
+(`-0.00045206`). Installed size in the existing `.venv`: `tensorflow` is **1,769.6 MB**
+apparent; `site-packages` totals **3,085.0 MB** but includes unrelated packages (MLflow). This
+is not a clean runtime total.
+
+**Official Streamlit Community Cloud limits** (docs: `docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app`,
+section "Resource limits", "as of February 2024"): CPU **0.078–2 cores**, memory **690 MB
+minimum, 2.7 GB maximum**, storage **50 GB maximum**. Read: a 686.8 MB peak sits **just under**
+the documented 690 MB floor, with essentially no headroom; the 1.77 GB TensorFlow install is the
+larger practical risk. This supports the GATE 5a decision: Docker primary, hosted Streamlit
+best-effort.
+
+### 3. Docker (the primary deliverable)
+
+The image **was built and run**. This took three attempts; the first two are recorded because
+the timing is part of the evidence:
+
+| Attempt | Dockerfile | Result |
+|---|---|---|
+| 1 | plain `pip install` | failed after **2,383 s (39m43s)**: `error: incomplete-download … 123.4 MB/259.0 MB`, "Download failed after 6 attempts because not enough bytes were received" |
+| 2 | `--timeout 120 --retries 20 --resume-retries 50` | **succeeded in 4,224.88 s (70.4 min)** |
+
+```
+docker build -t gold-irr-honest-forecasting .
+BUILD_SECONDS=4224.88
+#20 naming to docker.io/library/gold-irr-honest-forecasting:latest done
+#20 DONE 64.8s
+```
+
+Every second of that is the one `pip install` layer; the build cache grew 4.252 GB → 6.493 GB
+while it landed and the remaining COPY layers each took 0.1 s. The build did not fail on the
+Dockerfile: it failed on a slow `files.pythonhosted.org`, and the retry flags fixed it. This is
+the same network limit that stopped the clean-venv measurement in §2, which is why the
+`tensorflow-cpu` install could not be timed in a venv but did complete inside the build.
+
+**Image**
+
+```
+$ docker images gold-irr-honest-forecasting
+gold-irr-honest-forecasting:latest   59b76cee5177   2.99GB   (140MB unique, 2.85GB shared)
+
+$ docker history (layers over 50 MB)
+2240.0 MB  RUN pip install --no-cache-dir ... -r requirements.txt
+  85.3 MB  debian bookworm base
+sum of all layers: 2,385,392,490 bytes = 2.39 GB
+```
+
+`docker image inspect .Size` reports 603,725,822 bytes, which does not match either figure; on
+this Docker Desktop version it counts only layers not shared with other local images. The
+number a user sees in `docker images` is **2.99 GB on disk**, and the layer sum is 2.39 GB.
+The image is large because TensorFlow is: the single `pip install` layer is 2,240 MB of the
+2,385 MB total. Nothing else in the build contributes more than 85 MB.
+
+Manifest `sha256:3c8148b0b11ef523ab2111913481086b2b712ef72b6c492f39d7722bc8e01cf4`,
+config `sha256:b4e9e8fa4bb1aa91d36b1f6f22848d701e0fff8e5e4325130b99aa152dd9db10`,
+base `python:3.12-slim-bookworm@sha256:935c3c5b…` (Python 3.12.16).
+
+**Run, health and prediction**
+
+```
+$ docker run -d --name gold-irr-gate -p 18080:8000 -e API_KEY=demo-key gold-irr-honest-forecasting
+2feaa39e6aec…
+$ docker ps
+Up 25 seconds (healthy)   ports=8501/tcp, 0.0.0.0:18080->8000/tcp
+
+$ curl -sS localhost:18080/health
+{"status":true,"model_loaded":true,"timestamp":"2026-11-17T12:40:27.593028"}
+```
+
+The `HEALTHCHECK` itself passed five consecutive times (`docker inspect .State.Health.Log`,
+exit code 0 each, `/health` JSON in the output), so `healthy` is the container's own verdict,
+not a container that merely started.
+
+`POST /predict` with the committed 200-row sample:
+
+```json
+"prediction": {
+  "target": "next_trading_day_log_return",
+  "log_return": -0.00045206130016595125,
+  "simple_return": -0.00045195913585182153,
+  "persistence_log_return": 0.0,
+  "implied_next_price_persistence_equivalent": 172130169.0211332
+},
+"input": {"last_date": "2026-06-13", "rows_used": 200, "feature_rows": 141,
+          "sequence_length": 30, "last_close_irr": 172208000.0},
+"warnings": ["stale_input: last date 2026-06-13 is 157 days old (limit 7)"]
+```
+
+`log_return` is **bit-identical** to the host run and to the value in the README
+(`-0.00045206130016595125`), so the image reproduces the committed serving output, not just
+something plausible. The response also carries the `model` block (`git_commit 8d7715e`, seed 42)
+and four `caveats`; the README shows a trimmed example.
+
+Failure paths inside the container:
+
+```
+wrong key   → HTTP 401
+40 rows     → HTTP 422 {"detail":{"code":"too_few_rows","message":"need at least 89 rows, got 40"}}
+```
+
+**Non-root and contents**
+
+```
+$ docker exec gold-irr-gate id
+uid=10001(appuser) gid=10001(appuser) groups=10001(appuser)
+
+$ docker inspect --format 'User={{.Config.User}} Cmd={{.Config.Cmd}}'
+User=appuser Cmd=[uvicorn src.api.main:app --host 0.0.0.0 --port 8000]
+
+$ ls /app
+config  data  logs  models  requirements.txt  results  src  streamlit_app.py
+/app/data/sample/gold_sample.csv, /app/data/sample/README.md   (nothing else under data)
+/app/results: backtest.json backtest.log eval_V1.json eval_V2.json eval_V3.json
+              eval_summary.csv run.log
+```
+
+Absent, checked by `ls` inside the image: `data/raw`, `data/processed`, `tests`, `notebooks`,
+`results/predictions`, `.env`, and the legacy `models/gold_lstm_v2.keras`.
+
+**Streamlit from the same image** (the second service, started by overriding the command):
+
+```
+$ docker run -d -p 18501:8501 gold-irr-honest-forecasting \
+    streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+$ curl -o /dev/null -w '%{http_code} %{time_total}' localhost:18501/
+200 0.020436
+```
+
+It prints `Local URL: http://localhost:8501` — the old `7860` came from the removed
+`.streamlit/config.toml` keys and is gone. Both containers were stopped and removed after the
+evidence was captured; the image is left in place.
+
+**One precision note.** The `results/predictions` line in `.dockerignore` was added while this
+build was already running, so this image was built from the earlier context. It changes nothing
+here: `results/predictions/` did not exist on disk (the smoke run wrote to `/tmp`) and the
+`ls` above confirms it is not in the image. The next build picks up the rule.
+
+### 4. CI
+
+The YAML parses:
+
+```
+parsed OK; top-level keys: ['name', True, 'permissions', 'jobs']
+jobs: ['check']
+steps: ['actions/checkout@v4', 'actions/setup-python@v5', 'Install dependencies', 'Run checks']
+runs-on: ubuntu-latest
+python: 3.12
+```
+
+(`on` is read as the boolean `True` by PyYAML 1.1; GitHub's parser treats it as the event key.)
+
+Local replay, in order:
+
+* `python -m pip install --upgrade pip` → installed pip **26.3**.
+* `make check` → **83 passed** and **58 marked numbers** (above).
+* `python -m pip install -r requirements-dev.txt` **could not be replayed in a clean
+  environment**: it includes `-r requirements.txt`, so it hits the same `tensorflow-cpu`
+  download. In the existing `.venv`, the dev-only `yfinance` and `curl_cffi` are absent; the
+  tests do not import them (the loader imports them lazily).
+
+The workflow itself was **not executed on GitHub** from this environment.
+
+### 5. Repository size
+
+```bash
+git ls-files | wc -l
+git ls-files '*.py' | wc -l
+git ls-files '*.py' | xargs cat | wc -l
+git diff legacy-pre-refactor --stat | tail -1
+```
+
+```
+tracked files:        71
+tracked Python files: 33
+Python LOC:           5,849
+vs legacy tag:        148 files changed, 14731 insertions(+), 53859 deletions(-)
+```
+
+Read: the branch is smaller than the legacy state in tracked content because the 2.6 MB
+`models/gold_lstm_v2.keras` duplicate, notebook outputs and stale artifacts are gone; the
+insertion count is inflated by the three new documentation files (`README.md`,
+`docs/RELEASE_PLAN.md`, `docs/README_CLAIMS.md`) and the split requirement files, not by new
+pipeline code. The counts are measured after the Stage 5b documentation commits.
+
+### 6. TODOs left for the owner
+
+* `LICENSE`: replace `<TODO: copyright holder>`.
+* `README.md`: author, contact, citation, and the TGJU permission status are marked `TODO`.
+* Decide whether to deploy the best-effort hosted Streamlit app (not built here).
+* The image exists only in this machine's Docker daemon. Push it to a registry if the release
+  should ship one; nothing here does that.
+* CI has never executed on GitHub (no remote push). The YAML and every command were replayed
+  locally; the first real run is the owner's.
+* Merge the branch after review, without squashing. No release tag exists.
 
 ## Not verified in this session
 
