@@ -132,6 +132,10 @@
   removed, absolute notebook path replaced.
 - **README** (`369f151`): rewritten from scratch, 319 lines, 58 marked numbers checked against
   `results/*.json`; `docs/README_CLAIMS.md` records every claim and its verification.
+- **One hygiene item left on purpose.** `results/run.log` and `results/backtest.log` contain the
+  reference machine's absolute paths (`Wrote /home/…/results/eval_V2.json`). They are committed
+  run logs and the Stage 5b rules forbid changing anything under `results/`, so they were left
+  alone. Nothing secret is in them; they are the only absolute paths left outside `docs/`.
 
 ## Next
 
@@ -771,7 +775,7 @@ git diff legacy-pre-refactor --stat | tail -1
 tracked files:        71
 tracked Python files: 33
 Python LOC:           5,849
-vs legacy tag:        148 files changed, 14410 insertions(+), 53841 deletions(-)
+vs legacy tag:        148 files changed, 14414 insertions(+), 53841 deletions(-)
 ```
 
 Read: the branch is smaller than the legacy state in tracked content because the 2.6 MB
