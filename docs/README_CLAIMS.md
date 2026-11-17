@@ -48,6 +48,12 @@ Paths are relative to the repository root. `eval_V2.json` means `results/eval_V2
 | No confidence field in the response | `src/api/main.py`; `tests/test_api_contract.py` | test walks every key |
 | No rate limiter, deliberately | `src/api/security.py` module docstring | read the file |
 | Docker is the primary artifact; hosted Streamlit is best-effort | `docs/DECISIONS.md` D31 | read D31 |
+| Image is 2.99 GB on disk; the `pip install` layer is 2,240 MB | live build, 2026-11-17 | `docker images`; `docker history` |
+| Build took 4,224.9 s (70.4 min) on the reference machine | live build | `BUILD_SECONDS=4224.88`; `docs/STATE.md` Stage 5b §3 |
+| Container reports healthy; prediction bit-identical to a local run | live run, 2026-11-17 | `docker ps` "healthy"; `-0.00045206130016595125` both ways |
+| Image excludes `data/raw`, `data/processed`, tests, notebooks, `.env` | live image | `ls` inside the container |
+| Non-root UID 10001 | `Dockerfile`; live image | `docker exec id` → `uid=10001(appuser)` |
+| Streamlit runs from the same image on 8501 | live run | `curl` → HTTP 200; logs show port 8501 |
 
 ## Headline numbers
 

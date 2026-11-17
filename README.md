@@ -135,13 +135,17 @@ hosted Streamlit Community Cloud deployment is best-effort and is not provided h
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
-pip install -r requirements-dev.txt
-make test          # full suite
+make install       # runtime + development requirements into .venv
+make test          # full suite: 83 tests
+make check         # the test suite, then the README-numbers check
 make api           # FastAPI on :8000 (sets API_KEY=demo-key)
 make app           # Streamlit on :8501
 make docker-build  # single image, API + Streamlit
 make docker-run    # API on :8000
 ```
+
+`make check` is exactly what CI runs: `pytest`, then `scripts/check_readme_numbers.py`, which
+re-reads every number marked in this file from `results/*.json` and fails on drift.
 
 `make evaluate` re-runs the pre-registered Stage 3 protocol. It retrains 109 LSTMs and took
 1,259.6 s (21.0 min) on the reference machine; it needs the full local dataset, which is not
@@ -150,6 +154,29 @@ in the repository. `make backtest` re-runs the inference-only economic check.
 `make fetch-data` calls the TGJU and Yahoo scrapers and writes `data/raw/final_gold_dataset.csv`.
 It needs `yfinance` and `curl_cffi` (installed by `requirements-dev.txt`), may break if TGJU
 changes its endpoint, and writes to a gitignored directory.
+
+### Docker
+
+The image is the primary deployment artifact: one Python 3.12 slim image, non-root UID 10001,
+`HEALTHCHECK` on `/health`, API on 8000 by default and Streamlit from the same image by
+overriding the command.
+
+```bash
+docker build -t gold-irr-honest-forecasting .
+docker run --rm -p 8000:8000 -e API_KEY=demo-key gold-irr-honest-forecasting
+docker run --rm -p 8501:8501 gold-irr-honest-forecasting \
+  streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+```
+
+Measured on the reference machine: the image is **2.99 GB** on disk, of which the single
+`pip install` layer is 2,240 MB — almost all of it TensorFlow. The build took **4,224.9 s
+(70.4 min)** because the connection to `files.pythonhosted.org` dropped the 259 MB
+`tensorflow-cpu` wheel; the Dockerfile retries and resumes, so a fast connection should be
+much quicker. The running container reports `healthy` and returns
+`-0.00045206130016595125` for the sample below, bit-identical to the value from a local run.
+
+The image contains the model, scalers, metadata, `results/` JSON and the 200-row sample. It
+does not contain `data/raw`, `data/processed`, tests, notebooks or `.env`.
 
 ### API
 

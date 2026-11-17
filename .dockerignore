@@ -17,8 +17,11 @@ data/mlflow.db
 data/mlops_audit.db
 *.parquet
 
-# Local-only artifacts and material not needed at runtime
+# Local-only artifacts and material not needed at runtime.
+# results/predictions holds opt-in per-row CSVs that carry hold-out labels; the
+# image ships the aggregate JSON only.
 logs
+results/predictions
 mlruns
 mlflow
 mlflow.db
