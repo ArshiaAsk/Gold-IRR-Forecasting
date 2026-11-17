@@ -76,8 +76,10 @@ Other warm-ups, all shorter and therefore not binding:
 | `macd_norm`, `macd_signal_norm` | 1 (EMA, no warm-up) | `src/feature_eng.py:76-81` |
 
 Verified empirically on the local series: an 88-row tail yields 29 valid feature rows, an
-89-row tail yields exactly 30. The check is `n_feature_rows >= 30`, not a hardcoded 89, so
-the constant and the code cannot drift apart.
+89-row tail yields exactly 30. The adapter applies two checks: a fast row-count check
+(`n < 89`) and, after computing features, `n_feature_rows >= sequence_length`. The second is
+derived from the features actually computed, so a change to the feature set cannot silently
+produce a short window.
 
 ### 1.3 Maximum number of rows: **5,000**
 
