@@ -735,3 +735,22 @@ PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
 ```
 
 Tests: **44 passed** (9 new backtest tests + 35 existing).
+
+---
+
+## 12. Post-release note (Stage 5b, 2026-11-17)
+
+The headline numbers above **predate** the opt-in `--save-predictions` flag added to
+`src/evaluate.py` in Stage 5b. The flag was not used for any committed result: `results/*.json`
+still contains aggregate metrics only, and no result file was re-run or overwritten.
+
+- `python -m src.evaluate ... --save-predictions --out-dir <dir>` additionally writes
+  `<dir>/predictions/<variant>_<sample>.csv` with `variant, sample, model, date, y_true, y_pred`.
+  It is opt-in, and `results/predictions/` is gitignored.
+- A scratch smoke run (`--variant V2 --seeds 1 --epochs 1 --skip-legacy --out-dir /tmp/s5b-smoke`)
+  verified the flag: 2,760 walk-forward rows (5 models × 552) and 1,050 hold-out rows
+  (5 × 210). Its model metrics are **not** comparable to the headline: one seed and one epoch
+  are a wiring check, not an evaluation.
+- The suite moved to a single command in Stage 5b. The reproduce command in §9 and §11.11 is
+  historical; the current command is `python -m pytest` from the repository root, which collects
+  every test module under `tests/` (the old root `test_pipeline.py` was moved there).

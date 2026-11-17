@@ -60,14 +60,14 @@ def _git_commit() -> str:
         return "unknown"
 
 
-def _setup_logging() -> logging.Logger:
-    """Attach the results/run.log handler. Called from main(), never on import."""
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+def _setup_logging(out_dir: str = RESULTS_DIR) -> logging.Logger:
+    """Attach the run.log handler. Called from main(), never on import."""
+    os.makedirs(out_dir, exist_ok=True)
     logger = logging.getLogger("stage3")
     logger.setLevel(logging.INFO)
     if not any(isinstance(h, logging.FileHandler) for h in logger.handlers):
         fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
-        fh = logging.FileHandler(os.path.join(RESULTS_DIR, "run.log"), mode="w", encoding="utf-8")
+        fh = logging.FileHandler(os.path.join(out_dir, "run.log"), mode="w", encoding="utf-8")
         fh.setFormatter(fmt)
         sh = logging.StreamHandler()
         sh.setFormatter(fmt)
@@ -183,6 +183,30 @@ def _date_positions(target_frame, dates):
     return pos[pos >= 0]
 
 
+def _write_predictions(out_dir, variant, sample, predictions, y_true):
+    """Write per-row predictions for one variant and sample (opt-in)."""
+    rows = []
+    for model, pred in predictions.items():
+        if pred is None or len(pred) == 0:
+            continue
+        idx = pred.index
+        for date, actual, forecast in zip(idx, y_true.loc[idx].values, pred.values):
+            rows.append({
+                "variant": variant,
+                "sample": sample,
+                "model": model,
+                "date": str(pd.Timestamp(date).date()),
+                "y_true": float(actual),
+                "y_pred": float(forecast),
+            })
+    if not rows:
+        return
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"{variant}_{sample}.csv")
+    pd.DataFrame(rows).to_csv(path, index=False)
+    LOGGER.info("Wrote %s (%d rows)", path, len(rows))
+
+
 def _metrics_row(variant, model, sample, y, pred, hist_pred):
     m = evaluate_predictions(y, pred, hist_pred)
     return {
@@ -215,7 +239,8 @@ def _metrics_row(variant, model, sample, y, pred, hist_pred):
     }
 
 
-def run_variant(variant: str, args, global_df: pd.DataFrame, raw: pd.DataFrame):
+def run_variant(variant: str, args, global_df: pd.DataFrame, raw: pd.DataFrame,
+                out_dir: str = RESULTS_DIR):
     t0 = time.time()
     LOGGER.info("=" * 72)
     LOGGER.info("Variant %s", variant)
@@ -299,6 +324,7 @@ def run_variant(variant: str, args, global_df: pd.DataFrame, raw: pd.DataFrame):
     y_wf = pd.concat(wf_y).sort_index()
     hist_wf = pd.concat(wf_hist).sort_index()
     walkforward = {}
+    pooled = {}
     for m in model_names:
         preds = [p for p in wf_preds[m] if p is not None and len(p) > 0]
         if not preds:
@@ -307,12 +333,17 @@ def run_variant(variant: str, args, global_df: pd.DataFrame, raw: pd.DataFrame):
         p = p[~p.index.duplicated(keep="first")]
         y = y_wf.loc[p.index]
         h = hist_wf.loc[p.index]
+        pooled[m] = p
         walkforward[m] = _metrics_row(variant, m, "walkforward", y.values, p.values, h.values)
         walkforward[m]["per_fold"] = fold_metrics[m]
         coverage[m] = len(p)
         LOGGER.info("  WF %-16s n=%4d rmse=%.6f r2=%+.4f dm_p=%.4f dir=%.4f",
                     m, len(p), walkforward[m]["rmse"], walkforward[m]["r2_zero"],
                     walkforward[m]["dm_p_one_sided"], walkforward[m]["dir_acc"])
+
+    if args.save_predictions:
+        _write_predictions(os.path.join(out_dir, "predictions"), variant,
+                           "walkforward", pooled, y_wf)
 
     # ---------------- Hold-out: touched once, after all walk-forward numbers.
     holdout_idx = np.arange(len(pre), len(stat))
@@ -348,6 +379,10 @@ def run_variant(variant: str, args, global_df: pd.DataFrame, raw: pd.DataFrame):
         LOGGER.info("  HO %-16s n=%4d rmse=%.6f r2=%+.4f dm_p=%.4f dir=%.4f",
                     m, len(p), holdout_metrics[m]["rmse"], holdout_metrics[m]["r2_zero"],
                     holdout_metrics[m]["dm_p_one_sided"], holdout_metrics[m]["dir_acc"])
+
+    if args.save_predictions:
+        _write_predictions(os.path.join(out_dir, "predictions"), variant,
+                           "holdout", holdout_preds, y_hold)
 
     # ---------------- Cost sanity (per sample, primary variant only in RESULTS).
     cost = {
@@ -436,7 +471,7 @@ def _edge_verdict(wf, ho):
     }
 
 
-def _write_summary(all_results):
+def _write_summary(all_results, out_dir: str = RESULTS_DIR):
     rows = []
     for res in all_results:
         for sample in ("walkforward", "holdout"):
@@ -455,7 +490,7 @@ def _write_summary(all_results):
     ]
     df = pd.DataFrame(rows)
     df = df[[c for c in cols if c in df.columns]]
-    path = os.path.join(RESULTS_DIR, "eval_summary.csv")
+    path = os.path.join(out_dir, "eval_summary.csv")
     df.to_csv(path, index=False)
     LOGGER.info("Wrote %s (%d rows)", path, len(df))
 
@@ -518,10 +553,19 @@ def main(argv=None):
     parser.add_argument("--skip-legacy", action="store_true")
     parser.add_argument("--artifact", action="store_true",
                         help="train and save the primary V2 artifact")
+    parser.add_argument("--save-predictions", action="store_true",
+                        help="write per-row OOS and hold-out predictions to "
+                             "<out-dir>/predictions/ (opt-in; not run for the "
+                             "committed results)")
+    parser.add_argument("--out-dir", default=RESULTS_DIR,
+                        help="where JSON/CSV/log/predictions are written "
+                             "(default: results/). Use a scratch dir to avoid "
+                             "overwriting committed results.")
     args = parser.parse_args(argv)
 
-    _setup_logging()
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+    out_dir = os.path.abspath(args.out_dir)
+    _setup_logging(out_dir)
+    os.makedirs(out_dir, exist_ok=True)
     LOGGER.info("Stage 3 evaluation start; git=%s; args=%s", _git_commit(), vars(args))
     raw = load_raw_prices()
     global_df = load_global_series(raw)
@@ -533,14 +577,14 @@ def main(argv=None):
     all_results = []
     t0 = time.time()
     for v in variants:
-        res = run_variant(v, args, global_df, raw)
+        res = run_variant(v, args, global_df, raw, out_dir=out_dir)
         all_results.append(res)
-        path = os.path.join(RESULTS_DIR, f"eval_{v}.json")
+        path = os.path.join(out_dir, f"eval_{v}.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(res, f, indent=2, default=_json_default)
         LOGGER.info("Wrote %s", path)
 
-    _write_summary(all_results)
+    _write_summary(all_results, out_dir=out_dir)
 
     if args.artifact:
         if "V2" not in variants:
