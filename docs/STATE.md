@@ -771,7 +771,7 @@ git diff legacy-pre-refactor --stat | tail -1
 tracked files:        71
 tracked Python files: 33
 Python LOC:           5,849
-vs legacy tag:        148 files changed, 14731 insertions(+), 53859 deletions(-)
+vs legacy tag:        148 files changed, 14410 insertions(+), 53841 deletions(-)
 ```
 
 Read: the branch is smaller than the legacy state in tracked content because the 2.6 MB
