@@ -64,6 +64,10 @@ logs/
 !results/run.log
 !results/backtest.log
 
+# Opt-in per-row predictions (--save-predictions); not committed, because they
+# carry hold-out labels and are reproducible, not a deliverable artifact.
+results/predictions/
+
 # Generated outputs and caches
 outputs/
 trading_bot/outputs/
