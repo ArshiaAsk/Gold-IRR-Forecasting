@@ -1,18 +1,21 @@
-# Single service. Streamlit is not part of this image (decision D17).
-version: '3.8'
-
+# One service (the API). Kept because it documents the port, the demo auth
+# setting and the healthcheck in one place; `make docker-run` is the shorter
+# path for a single container. Streamlit runs from the same image by overriding
+# the command (see Dockerfile) and is not a compose service.
 services:
   api:
     build:
       context: .
       dockerfile: Dockerfile
+    image: gold-irr-honest-forecasting
     ports:
       - "8000:8000"
     environment:
-      - API_KEY_REQUIRED=false
+      # Demo key only. Protected endpoints return 503 when API_KEY is unset.
+      - API_KEY=${API_KEY:-demo-key}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 45s
