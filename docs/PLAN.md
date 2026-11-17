@@ -317,6 +317,10 @@ Not changed: `results/`, `models/`, `docs/EVAL_PROTOCOL.md`, `docs/BACKTEST_PROT
   `.dockerignore` rule for opt-in predictions.
 - `49e117e` — `docs/STATE.md` acceptance outputs, including the Docker build and run evidence.
 - `799069d` — the diff figures in `docs/STATE.md` corrected to the measured values.
+- `074e5b1` — a note on the absolute paths left in `results/run.log` and `results/backtest.log`.
+- `3b476b9` — the diff figures in `docs/STATE.md` synced to the committed tree.
+
+Documentation only after `539f92b`; no code, model or committed result changed.
 
 The image was built and run after the last code commit: 2.99 GB, 4,224.9 s of build time,
 `healthy`, and a prediction bit-identical to a local run. That evidence is in
