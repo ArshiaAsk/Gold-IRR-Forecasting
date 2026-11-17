@@ -1,7 +1,7 @@
 """
 Unit Tests for Gold Price LSTM Pipeline
 
-Run with: pytest test_pipeline.py -v
+Run with: pytest tests/test_pipeline.py -v  (or plain ``pytest`` from the repo root)
 """
 
 import unittest
@@ -11,8 +11,8 @@ import tempfile
 import os
 import sys
 
-# Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Repo root on the path when this file is run directly.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.settings import config, DataConfig, ModelConfig
 from src.data_preprocessor import DataPreprocessor
