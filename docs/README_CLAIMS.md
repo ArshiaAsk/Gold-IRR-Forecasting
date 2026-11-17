@@ -46,6 +46,8 @@ Paths are relative to the repository root. `eval_V2.json` means `results/eval_V2
 | API returns 401 for a wrong key and 422 for 40 rows | `src/api/security.py`, `src/api/main.py` | ran both requests |
 | API response values (`log_return` etc.) | live run against the 200-row sample | captured output below |
 | No confidence field in the response | `src/api/main.py`; `tests/test_api_contract.py` | test walks every key |
+| No rate limiter, deliberately | `src/api/security.py` module docstring | read the file |
+| Docker is the primary artifact; hosted Streamlit is best-effort | `docs/DECISIONS.md` D31 | read D31 |
 
 ## Headline numbers
 

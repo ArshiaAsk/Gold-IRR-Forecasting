@@ -128,7 +128,8 @@ notebooks/exploratory/  early sketches; outputs cleared, not the final evaluatio
 ```
 
 Python **3.12**. The runtime needs only `requirements.txt`; development, training and data
-fetching need `requirements-dev.txt`.
+fetching need `requirements-dev.txt`. The Docker image is the primary deployment artifact; a
+hosted Streamlit Community Cloud deployment is best-effort and is not provided here.
 
 ### Quickstart
 
@@ -249,7 +250,8 @@ are undocumented and may break without notice.
   verdict is unchanged. It is recorded, not fixed (`docs/EVAL_PROTOCOL.md` §11 D-1).
 * **The hold-out is ~210 rows in a strongly trending nominal series.** Statistical power is
   low, and the results describe this sample, not future performance. A 210-row window cannot
-  rule out small effects; it can rule out the large, tradeable effect the old document implied.
+  rule out small effects, and it does not support the large, tradeable effect the old document
+  implied.
 * **The served model is the seed-42 artifact.** Stage 3 saved aggregate metrics only, so the
   per-seed and 5-seed backtests are not recoverable without retraining. Seed 42 was fixed
   before the run, not chosen afterwards; its hold-out spread is 9.4% of actual, and its
