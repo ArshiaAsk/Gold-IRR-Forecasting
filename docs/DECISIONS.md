@@ -431,6 +431,80 @@ long/flat rules add no value over buy-and-hold after costs.
 
 ---
 
+## D29 — GATE 4 accepted: the economic finding is final; the seed-42 artifact is served
+
+**Date:** 2026-11-17 · **Status:** accepted (owner) · **Supersedes nothing; closes GATE 4**
+
+The owner accepted Stage 4 and fixed the final economic finding:
+
+- **No added value over buy-and-hold.** S2 (long when the model predicts up) is
+  **significantly worse than buy-and-hold even at 0% cost**: C0 mean difference
+  −17.83 bp/day, CI [−40.54, −3.08]. S3 (long/short) is **indistinguishable** from
+  buy-and-hold at 0% and 0.75%/side (C0 −2.93 bp/day, CI [−18.31, +6.96]; C2 −7.56 bp/day,
+  CI [−23.96, +2.01]) and **significantly worse at 1.5%/side** (C3 −12.19 bp/day,
+  CI [−29.82, −2.38]). All from `results/backtest.json` (`bootstrap`, `verdict`).
+- **No re-runs and no extra seeds.** The committed seed-42 artifact
+  (`models/gold_lstm_stationary_v2.keras`) is the model that gets served. The hold-out touch
+  count of six prediction passes / three scored stands (D27) and is reported, not repaired.
+- **Four facts must appear in the final `README.md` (Stage 5b).** They are tracked as a
+  checklist in `docs/STATE.md`:
+  1. the touch-count admission (six prediction passes, three scored, "touched once" not
+     literally met);
+  2. the one-label validation/hold-out overlap (D-1, D28);
+  3. the nominal-vs-USD gold return gap (+57.89% vs +5.97% over the traded period);
+  4. the hold-out is ~210 rows in a trending nominal series.
+
+**Consequence:** the served model is the seed-42 artifact, served as a negative result. No
+Stage 5a work may retrain, re-seed, or re-score the hold-out.
+
+---
+
+## D30 — Serving contract: raw rows in, one feature function, fail closed
+
+**Date:** 2026-11-17 · **Status:** accepted · **Executed in Stage 5a**
+
+The API and the Streamlit app serve `models/gold_lstm_stationary_v2.keras` (+ its two scalers
+and metadata). The full contract is `docs/SERVING_DESIGN.md`; the decisions it encodes:
+
+1. **Raw rows, not features.** `POST /predict` takes daily `date` + `Gold_IRR`, `USD_IRR`,
+   `Ounce_USD`, `Oil_USD` and runs `src/feature_eng.py::prepare_model_input`, which calls
+   `add_stationary_features` — the same function training and evaluation call. There is no
+   second feature implementation and no raw-level fallback.
+2. **89-row minimum**, derived as `(60 − 1) + 30`: the 60-row `price_sma_60` warm-up plus the
+   30-row sequence. Verified empirically (88 rows → 29 feature rows, 89 → 30). Maximum 5,000
+   rows.
+3. **Reject, do not warn, on implausible jumps.** `|ln(p_t/p_{t−1})| > 0.5` (≈65%) is a unit
+   or row error. The observed maximum in the bundled sample and the local full series is
+   0.1777, so the limit has 2.8× headroom and still catches Rial/Toman confusion (ln 10 = 2.303).
+4. **Reject the 2023-10-27 → 2025-08-06 block.** V2 re-pairs those rows with the global bar of
+   the *relabelled* date; a raw-row request cannot supply that vintage. Serving them would
+   feed V1-style global features to a V2-trained model. Requests that touch the window return
+   `422 block_dates_unsupported` and say to start after 2025-08-06.
+5. **Staleness is a warning** (last date older than 7 calendar days), not an error: the caller
+   may be back-testing.
+6. **No price headline and no confidence interval.** The response leads with the log return,
+   reports the zero-return persistence benchmark beside it, and labels any implied price
+   `persistence-equivalent`. There is no confidence field of any kind; a test walks every key.
+7. **Auth fails closed.** `API_KEY` from the environment, `hmac.compare_digest`, `/health`
+   unauthenticated. With `API_KEY` unset, protected endpoints return 503. No rate limiter: a
+   deliberate omission for a demo, stated rather than left as a disabled switch.
+8. **Concurrency.** Plain `def` endpoints run in FastAPI's threadpool; the bundle loads once in
+   `lifespan`; a lock serialises `model.predict`.
+
+**Known limitation, measured:** serving from a short window seeds the MACD EMA at the first
+supplied row. The feature difference from the full-history frame is 1.6e-4 at 89 rows,
+1.1e-8 at 200, 5e-16 at 400; the prediction difference is 5.6e-5 at 89 rows and 3.3e-9 at
+200. The bundled 200-row sample is therefore at the 1e-8 level. The code is identical — only
+the available history differs — and the effect is reported in the API caveats, the design
+note, and a parity test.
+
+**Consequence:** every accepted request produces features bit-identical to the evaluation
+path on the same rows (measured max difference 0.0 over 696 row-comparisons in the sample and
+5 post-block positions in the full series), and the served prediction equals the
+evaluation-primitive prediction exactly.
+
+---
+
 ## Open decisions
 
 These are the owner's calls. Each names the stage it blocks.

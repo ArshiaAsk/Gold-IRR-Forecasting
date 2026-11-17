@@ -1,7 +1,7 @@
 # Refactor Plan — Honest Portfolio Piece (B-lite)
 
-**Status:** Stages 0–4 complete; Stage 5 split into **5a (serving)** and **5b (reproducibility,
-Docker, CI, README)**, both pending · **Branch:** `refactor/honest-portfolio` · **Baseline tag:** `legacy-pre-refactor` (→ `d1670cc`)
+**Status:** Stages 0–5a complete; **5b (reproducibility, Docker, CI, README) pending** ·
+**Branch:** `refactor/honest-portfolio` · **Baseline tag:** `legacy-pre-refactor` (→ `d1670cc`)
 **Source of truth for the "before" state:** `docs/AUDIT_REPORT.md` (2026-11-13, read-only audit of `d1670cc`)
 
 ## Stage log
@@ -16,7 +16,7 @@ Docker, CI, README)**, both pending · **Branch:** `refactor/honest-portfolio` �
 | 2b | done | `147d58b`, `5c6a74a`, `66b2353` | scope reduction, minimal API, repo hygiene |
 | 3 | done | `798981a`, `cb75162`, `37585ac`, `8d7715e`, `64c9798`, `5f4abaa` | no demonstrated edge; GATE 3 accepted; verdict final |
 | 4 | done | `1e3e634`, `0cc0647`, `9b9caca`, `cf09f8d`, `3b5ac3a` | economic reality: no added value over buy-and-hold; `trading_bot/` removed |
-| 5a | pending | — | serving: API + Streamlit rewired; one feature function |
+| 5a | done | `1768b2e`, `f587864`, `1bd4a5b`, `f749791`, `e9d65e0` | serving: API + Streamlit on the seed-42 artifact; one feature function; 79 tests |
 | 5b | pending | — | reproducibility, Docker, CI, README |
 
 ---
@@ -234,15 +234,15 @@ prediction, not "AI").
 **Goal:** make the stationary model the served model, with no train/serve feature skew.
 
 ### Checklist
-- [ ] Rewire the API to `models/gold_lstm_stationary_v2.keras` + its two scalers; `/model-info`
+- [x] Rewire the API to `models/gold_lstm_stationary_v2.keras` + its two scalers; `/model-info`
       reports the 23-feature stationary schema and sequence length 30.
-- [ ] Rewire Streamlit to the same artifact and the same feature function.
-- [ ] **One feature function** (`src/feature_eng.py::add_stationary_features`) is used by
+- [x] Rewire Streamlit to the same artifact and the same feature function.
+- [x] **One feature function** (`src/feature_eng.py::add_stationary_features`) is used by
       training, evaluation, the API and Streamlit. No second implementation, no raw-level
       fallback.
-- [ ] The API validates the real `(30, 23)` input and returns a log-return prediction; no
+- [x] The API validates the real `(30, 23)` input and returns a log-return prediction; no
       confidence interval, no fabricated noise.
-- [ ] Serving tests: the feature function is causal, the API schema matches the artifact
+- [x] Serving tests: the feature function is causal, the API schema matches the artifact
       metadata, and a known input produces the same prediction as the offline path.
 
 ### Acceptance criterion (must be runnable)
@@ -252,6 +252,27 @@ curl -s localhost:8000/model-info             # 23 features, seq_len 30
 streamlit run streamlit_app.py                # starts and predicts
 pytest tests/ -q                              # green
 ```
+
+### Executed — Stage 5a (`1768b2e`, `f587864`, `1bd4a5b`, `f749791`, `e9d65e0`)
+
+Design committed first (`docs/SERVING_DESIGN.md`, `1768b2e`) before any serving code. Then:
+
+1. `src/feature_eng.py` gained `prepare_model_input`, the single raw-row adapter, plus the
+   documented constants (`MIN_HISTORY_ROWS = 89`, `MAX_HISTORY_ROWS = 5000`,
+   `MAX_ABS_LOG_JUMP = 0.5`) and `InputError` with stable codes.
+2. `src/api/` was rewritten: `predictor.py` loads the bundle from the metadata, `security.py`
+   compares `API_KEY` with `hmac.compare_digest`, `main.py` exposes three endpoints that take
+   raw rows. The old `(30, 15)` contract, `FeatureBuilder`, the rate limiter and every
+   price-level metric reference are gone.
+3. `streamlit_app.py` was rewritten as four tabs (Findings, Data, Model demo, About) that read
+   `results/*.json` and the sample. Every fabricated number in the old UI was removed.
+4. New tests: `test_serving_parity.py` (8), `test_api_contract.py` (19),
+   `test_streamlit_app.py` (8). Suite: **79 passed** (30 existing `tests/` + 14
+   `test_pipeline.py` + 35 new).
+5. Footprint measured for the hosting question; recorded in `docs/STATE.md`.
+
+Not changed: `results/`, `models/`, `docs/EVAL_PROTOCOL.md`, `docs/BACKTEST_PROTOCOL.md`,
+`Dockerfile`, `README.md`. No retraining.
 
 ---
 

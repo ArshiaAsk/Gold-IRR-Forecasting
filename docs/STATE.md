@@ -1,12 +1,13 @@
 # Project State
 
-**Date:** 2026-11-16
-**Stage:** Stages 3 and 4 complete. GATE 3 accepted ("no demonstrated edge" final); Stage 4 economic reality complete, **stopped at GATE 4**. `trading_bot/` removed. Stage 5 split into **5a (serving)** and **5b (reproducibility, Docker, CI, README)**, not started.
+**Date:** 2026-11-17
+**Stage:** Stages 3, 4 and 5a complete. GATE 3 accepted ("no demonstrated edge" final); GATE 4 accepted (D29: no added value over buy-and-hold, no re-runs, seed-42 artifact served); Stage 5a serving complete, **stopped at GATE 5a**. Stage 5b (reproducibility, Docker, CI, README) not started.
 **Branch:** `refactor/honest-portfolio`
 **Baseline tag:** `legacy-pre-refactor` → `d1670cc` (annotated)
 **Pre-refactor description:** `docs/AUDIT_REPORT.md` (2026-11-13)
 **Data-quality authority:** `docs/DATA_INTEGRITY.md` (includes "Stage 1b" and "Stage 2a — Applied fix")
 **Evaluation authority:** `docs/EVAL_PROTOCOL.md` (pre-registered) and `docs/RESULTS.md` (measured)
+**Serving authority:** `docs/SERVING_DESIGN.md`
 
 ---
 
@@ -91,19 +92,40 @@
 - **`trading_bot/` removed** with `git rm`; no kept code imported it; the tag preserves it (D26). `src/backtest_check.py` + 9 tests; **44 tests pass**.
 - **Results files.** `results/backtest.json`, `results/backtest.log`. Full tables and plain-language reading in `docs/RESULTS.md` §11.
 
+### Stage 5a — serving (`1768b2e`, `f587864`, `1bd4a5b`, `f749791`, `e9d65e0`)
+
+- **Design first.** `docs/SERVING_DESIGN.md` committed at `1768b2e` before any serving code: input contract, the 89-row minimum with its derivation, error codes, output contract, timing, auth, concurrency and the four-tab UI.
+- **One feature path.** `src/feature_eng.py::prepare_model_input` is the only raw-row adapter; it validates the contract and calls `add_stationary_features`, the function training and evaluation already use. Measured parity: **0.0** max absolute difference over 696 row-comparisons at 24 sample positions and 5 post-block positions of the full series; served prediction equals the evaluation-primitive prediction exactly (max diff 0.0 over 5 positions).
+- **API.** `src/api/` rewritten around the seed-42 artifact: raw rows in, log return out, metadata and metrics read from `models/gold_lstm_stationary_v2.metadata.json` and `results/*.json`. The `(30, 15)` contract, `FeatureBuilder`, the rate limiter and every price-level metric reference are gone.
+- **Auth.** `API_KEY` compared with `hmac.compare_digest`; `/health` open; `API_KEY` unset → 503 on protected endpoints. No rate limiter (documented omission).
+- **UI.** `streamlit_app.py` rewritten as Findings / Data / Model demo / About, all numbers read from files, model load cached, missing artifacts rendered as a message.
+- **Tests.** 35 new (`test_serving_parity.py` 8, `test_api_contract.py` 19, `test_streamlit_app.py` 8). **79 passed** in total (30 `tests/` + 14 `test_pipeline.py` + 35 new).
+- **Footprint.** Streamlit + TensorFlow 2.20 + model + one prediction: **689 MB** peak RSS, **3.12 s** from import to prediction. Full AppTest run (all four tabs): **699 MB**, 3.2 s. Direct requirements total **2,345 MB** installed (TensorFlow alone 1,858 MB).
+- **Not changed:** `results/`, `models/`, `docs/EVAL_PROTOCOL.md`, `docs/BACKTEST_PROTOCOL.md`, `Dockerfile`, `README.md`. No retraining, no new seeds.
+
 ## Next
 
-**GATE 4 — owner reviews the Stage 4 economic reality.** The pre-registered finding is **no added value over buy-and-hold**. If accepted, Stage 5a (serving: API + Streamlit rewired to the stationary model, one feature function) and 5b (reproducibility, Docker, CI, README) follow. No README/API/Streamlit/Dockerfile changes until then.
+**Stage 5b — reproducibility, Docker, CI, README.** GATE 4 was accepted on 2026-11-17 (D29): the economic finding is final, no re-runs, and the committed seed-42 artifact is the served model. GATE 5a is the owner's review of this stage; Stage 5b starts only after it.
+
+### README checklist for Stage 5b (owner-mandated, D29)
+
+The final `README.md` must contain all four, in plain language:
+
+- [ ] **Touch count.** Six prediction passes over the hold-out, three of them scored; the pre-registered "touched once" was not literally met.
+- [ ] **Validation/hold-out overlap (D-1).** One validation label is the 2025-10-01 hold-out return (`docs/EVAL_PROTOCOL.md` §11 D-1, D28); recorded, not fixed.
+- [ ] **Nominal vs USD gold.** +57.89% nominal gold in IRR vs +5.97% gold in USD over the traded period (`results/backtest.json`); USD/IRR +49.0%.
+- [ ] **Hold-out shape.** ~210 rows of a trending nominal series; the metrics are not a claim about future performance.
 
 ## Blockers
 
-None. G1-final is resolved by D19; O1–O8 are resolved as D10–D17; Stage 3 and Stage 4 are complete.
+None. G1-final is resolved by D19; O1–O8 are resolved as D10–D17; Stages 3, 4 and 5a are complete.
 
 ## Known stale artifacts
 
-- `README.md` is still the pre-refactor document. It describes components deleted in Stage 2b, quotes metrics that contradict the artifacts, labels Rial as Toman, and still documents `trading_bot/` (removed in Stage 4). **Do not quote it.** Stage 5b rewrites it; Stages 3 and 4 supply the numbers, including the three data variants required by D19 and the economic table.
-- `models/gold_lstm_v2.keras` is the pre-refactor model. It is still tracked so the API has something to load. Stages 3 and 4 did **not** replace it; the new primary artifact is `models/gold_lstm_stationary_v2.keras` + its scalers + metadata, and Stage 5a wires it into the API and Streamlit.
+- `README.md` is still the pre-refactor document. It describes components deleted in Stage 2b, quotes metrics that contradict the artifacts, labels Rial as Toman, documents `trading_bot/` (removed in Stage 4) and shows the old `(30, 15)` API. **Do not quote it.** Stage 5b rewrites it; Stages 3–5a supply the numbers, including the three data variants required by D19, the economic table and the README checklist above.
+- `models/gold_lstm_v2.keras` and `models/scaler_X.pkl` / `scaler_y.pkl` are the pre-refactor artifacts. They are **no longer loaded by anything** — the API and Streamlit load `models/gold_lstm_stationary_v2.keras` and its two scalers. The old model is still tracked; removing it is a Stage 5b decision.
 - `notebooks/` are kept as history. They import `catboost`, `lightgbm`, `xgboost` and `statsmodels`, which are **not** installed by `requirements.txt` (listed there as optional comments).
+- `.streamlit/config.toml` pins port 7860 and disables CORS/XSRF for the old Hugging Face Space. It still overrides the port printed by `streamlit run`; Stage 5b owns it.
 
 ---
 
@@ -114,7 +136,7 @@ Everything below was produced by a command in this session. Nothing here is copi
 | Fact | How verified |
 |---|---|
 | Interpreter is Python 3.12.3 at `.venv/bin/python` | `.venv/bin/python -V` |
-| `pytest` is **not installed** in `.venv` | `.venv/bin/python -c "import pytest"` → `ModuleNotFoundError` |
+| `pytest` was **not installed** in `.venv` through Stage 4; **9.2.0** was installed in Stage 5a | `.venv/bin/python -c "import pytest; print(pytest.__version__)"` |
 | `yfinance` is **not installed** in `.venv` | `.venv/bin/python -c "import yfinance"` → `ModuleNotFoundError` |
 | `curl_cffi` is **not installed** in `.venv` | `ModuleNotFoundError`; live fetches used `urllib` instead |
 | Raw dataset has **1,424** data rows | `wc -l data/raw/final_gold_dataset.csv` → 1,425 incl. header |
@@ -126,7 +148,7 @@ Everything below was produced by a command in this session. Nothing here is copi
 | `scripts/` does not exist | `ls -d scripts` |
 | `docs/` contained only `AUDIT_REPORT.md` before Stage 0 | `ls docs` |
 | `docker-compose.yml` now defines exactly **one** service, `api` (was `ml-stack` before Stage 2b) | `grep -n "^  [a-z]" docker-compose.yml` |
-| Model file is tracked; both scalers are **not** | `git ls-files models/` → only `models/gold_lstm_v2.keras`; `models/scaler_X.pkl` and `scaler_y.pkl` exist on disk |
+| Five model files are tracked: the stationary artifact + metadata + both stationary scalers, and the old `gold_lstm_v2.keras` | `git ls-files models/`; the old `models/scaler_X.pkl` / `scaler_y.pkl` exist on disk but are untracked and unused |
 | `logs/test_metrics.json` reports price R² 0.9716991951320707, RMSE 4,840,916.90, MAE 2,883,359.74, MAPE 1.7017, log-return RMSE 0.0275036 — and **no** log-return R² field | `cat logs/test_metrics.json` (log file still on disk; `logs/` is ignored) |
 | `trading_bot/outputs/backtest_metrics.json` reported −12.034% return, Sharpe −7.361, max drawdown 15.105%, 30 trades, 40% win rate, benchmark +1,184.94%, period 2021-01-27 → 2025-12-20 (1,384 days) | read in Stage 0; the stale `trading_bot/outputs/` was deleted in Stage 2b |
 | `trading_bot/outputs/portfolio_log.csv` covered 2021-07-19 → 2026-06-11 (1,394 rows) and ended at 859,421,876.91 IRR — it did **not** match the committed metrics file's period | read in Stage 0; deleted in Stage 2b |
@@ -202,6 +224,21 @@ Everything below was produced by a command in this session. Nothing here is copi
 | Finding: **no added value over buy-and-hold** | same → `verdict` |
 | `trading_bot/` removed; no kept imports | `git ls-files | grep trading_bot` empty; grep of `src/`, `tests/`, `streamlit_app.py` |
 | Tests: **44 passed** (9 backtest + 35 existing) | pytest output |
+
+### Stage 5a verified facts
+
+| Fact | How verified |
+|---|---|
+| Design note committed before serving code | `git log -- docs/SERVING_DESIGN.md` → `1768b2e`; code commits follow |
+| Minimum rows **89** = (60 − 1) + 30 | derived from `price_sma_60` and `sequence_length`; 88-row tail → 29 feature rows, 89 → 30 |
+| Feature parity: **0.0** max abs difference | 24 sample positions, 696 row-comparisons, plus 5 post-block positions of the full series |
+| Prediction parity: **0.0** max abs difference | 5 positions, served vs `build_sequences` + scalers + model |
+| No lookahead | rows after t multiplied by 1.7 / 0.6 leave the prediction for t unchanged; a change at t does move it |
+| API serves the seed-42 artifact, metadata-driven | `/model-info` metadata equals the file; metrics equal `results/eval_V2.json` |
+| Validation codes | 8 rejected classes return their documented 422 code; missing/wrong key 401; no key 503 |
+| No confidence field | every response key walked; no `confidence`/`interval`/`bound` |
+| Streamlit: four tabs, no exception | `AppTest` run, all tab text asserted |
+| Suite: **79 passed** | 30 `tests/` + 14 `test_pipeline.py` + 35 new |
 
 ## Stage 2b acceptance outputs
 
@@ -296,6 +333,157 @@ find api_layer src/mlops                                                  # No s
 ```
 
 
+## Stage 5a acceptance outputs
+
+All commands run on `refactor/honest-portfolio` at `e9d65e0`, 2026-11-17, Python 3.12.3.
+
+`pytest 9.2.0` was **installed into `.venv`** for this stage (it was absent; Stage 2b used a
+scratch environment). `requirements.txt` already lists `pytest`; nothing else was installed.
+
+### 1. Full test suite
+
+```bash
+.venv/bin/python -m pytest tests/ test_pipeline.py -q
+```
+
+```
+collected 79 items
+======================= 79 passed, 20 warnings in 11.23s =======================
+```
+
+Breakdown: 30 existing `tests/` + 14 `test_pipeline.py` + 8 `test_serving_parity.py`
++ 19 `test_api_contract.py` + 8 `test_streamlit_app.py`.
+
+### 2. API
+
+```bash
+API_KEY=demo-key .venv/bin/python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8013
+```
+
+```
+INFO:     Started server process [80409]
+INFO:     Waiting for application startup.
+... src.api.predictor - INFO - Loaded models/gold_lstm_stationary_v2.keras (35489 params) ...
+... src.api.main - INFO - Serving models/gold_lstm_stationary_v2.keras
+INFO:     Application startup complete.
+```
+
+`/health` (no key):
+
+```
+{"status":true,"model_loaded":true,"timestamp":"2026-11-17T13:28:30.525328"}
+```
+
+`/model-info` without a key → `401`. With the key (trimmed to the contract and the headline
+numbers, all read from the files):
+
+```json
+{
+ "model_id": "gold_lstm_stationary_v2",
+ "metadata_source": "models/gold_lstm_stationary_v2.metadata.json",
+ "input_contract": {"min_rows": 89, "max_rows": 5000, "sequence_length": 30,
+                    "n_features": 23, "target": "next_trading_day_log_return"},
+ "holdout_lstm": {"n": 210, "rmse": 0.02654343629055195, "r2_zero": 0.00011901387468038482,
+                  "dir_acc": 0.5142857142857142, "dm_p_one_sided": 0.4984040692302986,
+                  "boot_r2_lo": -0.05772243482018194, "boot_r2_hi": 0.06298942977793245,
+                  "std_pred": 0.0033038654010531425, "std_actual": 0.026455760242444695,
+                  "corr": 0.03811900797197325},
+ "edge": "no demonstrated edge",
+ "economic": "no added value over buy-and-hold"
+}
+```
+
+`/predict` with the 200-row sample (`/tmp/predict_full.json`):
+
+```json
+{
+  "prediction": {
+    "target": "next_trading_day_log_return",
+    "log_return": -0.00045206130016595125,
+    "simple_return": -0.00045195913585182153,
+    "persistence_log_return": 0.0,
+    "implied_next_price_persistence_equivalent": 172130169.02113324
+  },
+  "input": {"last_date": "2026-06-13", "rows_used": 200, "feature_rows": 141,
+            "sequence_length": 30, "last_close_irr": 172208000.0},
+  "warnings": ["stale_input: last date 2026-06-13 is 157 days old (limit 7)"],
+  "statement": "This model has no demonstrated predictive edge: its log-return accuracy is
+                indistinguishable from a zero-return benchmark and the economic test finds no
+                value over buy-and-hold. See docs/RESULTS.md."
+}
+```
+
+`/predict` with 40 rows → `422`:
+
+```
+{"detail":{"code":"too_few_rows","message":"need at least 89 rows, got 40"}}
+```
+
+`/predict` with a wrong key → `401`:
+
+```
+{"detail":{"code":"invalid_api_key","message":"Invalid or missing API key"}}
+```
+
+### 3. Streamlit
+
+```bash
+.venv/bin/streamlit run streamlit_app.py --server.headless true --server.port 8513
+```
+
+```
+  You can now view your Streamlit app in your browser.
+
+  URL: http://0.0.0.0:7860
+```
+
+It binds the port given on the command line (`HTTP 200` on `:8513`); the printed URL comes
+from `[browser] serverPort = 7860` in `.streamlit/config.toml`.
+
+`AppTest`:
+
+```
+exceptions: 0
+tabs: ['Findings', 'Data', 'Model demo', 'About']
+metrics: [('Model prediction', '-0.05%'), ('Persistence', '+0.00%'), ('Realized', 'n/a')]
+```
+
+### 4. Parity
+
+```
+sample feature parity: positions=24 rows=696 max_abs_diff=0.000e+00
+prediction parity: n=5 max_abs_diff=0.000e+00
+full-series feature parity (5 post-block positions): max_abs_diff=0.000e+00
+```
+
+```
+tests/test_serving_parity.py ........                                     [100%]
+```
+
+### 5. Footprint
+
+| Stage | Peak RSS | Time |
+|---|---|---|
+| bare Python | 9.6 MB | 0.01 s |
+| + `streamlit` | 54.9 MB | 0.23 s |
+| + `tensorflow` (2.20.0) | 656.4 MB | 2.76 s |
+| + model and scalers | 668.2 MB | 2.68 s |
+| + one prediction from 200 rows | 689.0 MB | 3.12 s |
+| full `AppTest` run, all four tabs | 699.1 MB | 3.22 s |
+
+Installed size of the direct `requirements.txt` packages: **2,345.5 MB**, of which
+TensorFlow is **1,857.9 MB**. `.venv/lib/python3.12/site-packages` totals 3,234.9 MB (it also
+contains packages unrelated to this repo, e.g. MLflow). TensorFlow 2.20.0 metadata says
+`Requires-Python: >=3.9`; the installed wheel is `cp312-cp312-manylinux_2_17_x86_64`.
+`yfinance` and `curl_cffi` are listed in `requirements.txt` but are **not installed** in this
+`.venv`; they are imported lazily by `src/data_loader.py`.
+
+**Hosting read.** Assuming Streamlit Community Cloud's documented ~1 GB RAM per app (I could
+not verify this limit from the repository; it is an assumption), 699 MB peak is **plausibly
+within** the limit but with little headroom, and the larger risk is the install: a 1.86 GB
+unpacked TensorFlow plus the rest of the stack. This is a measurement, not a migration plan;
+no framework change was made.
+
 ## Not verified in this session
 
 Stated plainly so nobody mistakes these for measured facts:
@@ -341,21 +529,32 @@ wc -l data/raw/final_gold_dataset.csv data/processed/advanced_gold_features.csv
 # Re-derive the weekday table (the audit's version is mislabelled)
 .venv/bin/python -c "import pandas as pd; d=pd.read_csv('data/raw/final_gold_dataset.csv',index_col='Date',parse_dates=True); print(d.index.day_name().value_counts())"
 
-# Tests. pytest is not installed in .venv; use a scratch environment.
-python3 -m venv /tmp/pytest-scratch && /tmp/pytest-scratch/bin/pip install pytest
-PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
-  /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q
+# Tests (pytest 9.2.0 is installed in .venv as of Stage 5a; requirements.txt lists it)
+.venv/bin/python -m pytest tests/ test_pipeline.py -q
 
 # Stage 3 evaluation (writes results/ and the primary artifact; needs the local raw snapshot)
 .venv/bin/python -m src.evaluate --variant all --artifact
 
-# Minimal API
-.venv/bin/python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000
+# API — needs the committed artifact and a key
+API_KEY=demo-key .venv/bin/python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000
 curl -sS http://127.0.0.1:8000/health
+curl -sS -H "X-API-Key: demo-key" http://127.0.0.1:8000/model-info
+
+# POST /predict takes raw rows; build a payload from the bundled sample
+.venv/bin/python -c "import json,pandas as pd; d=pd.read_csv('data/sample/gold_sample.csv'); \
+print(json.dumps({'rows':[{'date':str(r.Date),'Gold_IRR':float(r.Gold_IRR),'USD_IRR':float(r.USD_IRR), \
+'Ounce_USD':float(r.Ounce_USD),'Oil_USD':float(r.Oil_USD)} for r in d.itertuples()]}))" > /tmp/predict.json
+curl -sS -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" \
+  -H "X-API-Key: demo-key" -d @/tmp/predict.json
+
+# Streamlit (offline; sample + committed artifacts only)
+.venv/bin/streamlit run streamlit_app.py
 
 # Regenerate features from the corrected data (writes to data/processed/, ignored)
 .venv/bin/python src/feature_eng.py
 ```
 
-`pytest` is not a dependency of the runtime venv; `requirements.txt` lists it for a fresh environment. There is still no `Makefile` (`make test` is a Stage 5 deliverable). Data files are **not** in a fresh clone: `data/sample/` is, and the full series must be fetched or supplied locally.
+`requirements.txt` lists `pytest` for a fresh environment. There is still no `Makefile`
+(`make test` is a Stage 5b deliverable). Data files are **not** in a fresh clone:
+`data/sample/` is, and the full series must be fetched or supplied locally.
 

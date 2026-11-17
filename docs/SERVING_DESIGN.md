@@ -44,7 +44,8 @@ Recent **raw daily rows**, exactly as they appear in `data/raw/final_gold_datase
 The four price columns are the names used by the raw dataset. They are **levels**, not
 features: the caller never sends features, so it cannot send a differently-scaled or
 differently-lagged feature matrix. `src/feature_eng.py::add_stationary_features` computes
-all 23 features inside the service.
+all 23 features inside the service. In the CSV the date column is `Date`; in JSON it is
+`date`.
 
 Dates must be **strictly increasing** (ascending, no duplicates). Order is a hard
 requirement rather than something the service silently sorts, because a silent sort would
@@ -96,14 +97,16 @@ same one:
 | 1 | `rows` present and non-empty | 422 | `empty_rows` | `rows must contain at least 89 daily rows` |
 | 2 | fewer than the minimum | 422 | `too_few_rows` | `need at least 89 rows, got N` |
 | 3 | more than 5,000 rows | 422 | `too_many_rows` | `at most 5000 rows, got N` |
-| 4 | duplicate dates | 422 | `duplicate_dates` | `duplicate date(s): ...` |
-| 5 | dates not strictly increasing | 422 | `unsorted_dates` | `dates must be strictly increasing; first violation at index i` |
-| 6 | NaN / ±inf in any price | 422 | `non_finite_value` | `non-finite value in column C at index i` |
-| 7 | price ≤ 0 | 422 | `non_positive_price` | `non-positive price in column C at index i` |
-| 8 | implausible daily jump | 422 | `implausible_jump` | `abs log change of C at i is X, above the 0.5 limit` |
-| 9 | window overlaps the mis-dated block | 422 | `block_dates_unsupported` | see §2.2 |
-| 10 | missing/extra columns | 422 | `schema` (pydantic) | pydantic's own detail list |
-| 11 | model artifacts absent | 503 | `model_not_loaded` | `model artifacts not loaded (status: ...)` |
+| 4 | missing price column | 422 | `missing_column` | `missing column(s): ...` |
+| 5 | unparseable date | 422 | `invalid_date` | `unparseable date: ...` |
+| 6 | duplicate dates | 422 | `duplicate_dates` | `duplicate date(s): ...` |
+| 7 | dates not strictly increasing | 422 | `unsorted_dates` | `dates must be strictly increasing; first violation at index i` |
+| 8 | NaN / ±inf in any price | 422 | `non_finite_value` | `non-finite value in column C at index i` |
+| 9 | price ≤ 0 | 422 | `non_positive_price` | `non-positive price in column C at index i` |
+| 10 | implausible daily jump | 422 | `implausible_jump` | `abs log change of C at i is X, above the 0.5 limit` |
+| 11 | window overlaps the mis-dated block | 422 | `block_dates_unsupported` | see §2.2 |
+| 12 | wrong field type / missing field | 422 | `schema` (pydantic) | pydantic's own detail list |
+| 13 | model artifacts absent | 503 | `model_not_loaded` | `model artifacts not loaded (status: ...)` |
 
 All semantic errors return `{"detail": {"code": "...", "message": "..."}}`. Pydantic shape
 errors (a missing column, a string where a number belongs) keep FastAPI's default 422
