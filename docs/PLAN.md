@@ -309,6 +309,18 @@ Not changed: `results/`, `models/`, `docs/EVAL_PROTOCOL.md`, `docs/BACKTEST_PROT
 - `369f151` — final `README.md`, `docs/README_CLAIMS.md`, `scripts/check_readme_numbers.py`,
   `tests/test_readme_numbers.py`.
 - `13ce2c6` — Makefile and `scripts/fetch_data.py`.
+- `416eed5` — D31 (GATE 5a accepted) and D32 (Stage 5b mechanics) in `docs/DECISIONS.md`.
+- `7fff2dd` — this file: Stage 5b rewritten as an executed log.
+- `f996ee8` — README: Docker is primary; the hold-out sentence stops claiming it can rule out
+  an effect.
+- `746575a` — README Docker section and `make install` / `make check`; the claims rows; the
+  `.dockerignore` rule for opt-in predictions.
+- `49e117e` — `docs/STATE.md` acceptance outputs, including the Docker build and run evidence.
+- `799069d` — the diff figures in `docs/STATE.md` corrected to the measured values.
+
+The image was built and run after the last code commit: 2.99 GB, 4,224.9 s of build time,
+`healthy`, and a prediction bit-identical to a local run. That evidence is in
+`docs/STATE.md` → "Stage 5b acceptance outputs" §3.
 
 Footprint, Docker evidence, YAML parse and the final acceptance outputs are in
 `docs/STATE.md` → "Stage 5b acceptance outputs".
