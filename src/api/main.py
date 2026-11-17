@@ -1,89 +1,93 @@
 """
-Minimal FastAPI service for the gold price LSTM model.
+Minimal FastAPI service for the committed stationary LSTM.
 
-Exactly three endpoints (decision D12): ``/health``, ``/model-info`` and
-``/predict``. There is no MLOps wiring: the app starts even when the model
-artifacts are absent, and ``/health`` reports ``model_loaded`` accordingly.
-API-key authentication is read from the environment by ``src/api/security.py``.
+Three endpoints (decision D12): ``/health``, ``/model-info``, ``/predict``.
+The caller sends recent **raw daily rows**; the service turns them into model
+input with ``src.feature_eng.prepare_model_input`` — the same function training
+and evaluation use — so there is no second feature implementation.
+
+The model has no demonstrated predictive edge (D24/D25). The response says so
+in a fixed ``statement`` and a ``caveats`` list, returns a log return rather
+than a price headline, and never returns a confidence interval.
+
+The contract is docs/SERVING_DESIGN.md.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date as date_type
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+import pandas as pd
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel
 
 from config.logging import setup_logging
-from src.api.security import (
-    RATE_LIMIT_ENABLED,
-    client_key,
-    rate_limiter,
-    require_api_key,
+from src.api.predictor import ArtifactMissing, ServingBundle, load_bundle
+from src.api.security import require_api_key
+from src.feature_eng import (
+    MAX_HISTORY_ROWS,
+    MIN_HISTORY_ROWS,
+    RAW_PRICE_COLUMNS,
+    InputError,
+    prepare_model_input,
 )
-
-try:
-    from src.api.predictor import GoldPricePredictor
-except ImportError:  # script-style import (python src/api/main.py)
-    from predictor import GoldPricePredictor
 
 setup_logging(base_log_dir="logs", level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-MODEL_PATH = BASE_DIR / "models" / "gold_lstm_v2.keras"
-SCALER_X_PATH = BASE_DIR / "models" / "scaler_X.pkl"
-SCALER_Y_PATH = BASE_DIR / "models" / "scaler_y.pkl"
+RESULTS_DIR = BASE_DIR / "results"
+PRIMARY_RESULTS = RESULTS_DIR / "eval_V2.json"
+BACKTEST_RESULTS = RESULTS_DIR / "backtest.json"
 
-SEQUENCE_LENGTH = 30
-N_FEATURES = 15
-FEATURE_NAMES = [
-    'Gold_LogRet', 'USD_LogRet', 'Ounce_LogRet', 'Oil_LogRet',
-    'SMA_7', 'RSI_14', 'MACD', 'MACD_Signal',
-    'Bollinger_Upper', 'Bollinger_Lower',
-    'Gold_LogRet_Lag_1', 'Gold_LogRet_Lag_2', 'Gold_LogRet_Lag_3',
-    'USD_LogRet_Lag_1', 'USD_LogRet_Lag_2',
+STALE_AFTER_DAYS = 7
+
+STATEMENT = (
+    "This model has no demonstrated predictive edge: its log-return accuracy is "
+    "indistinguishable from a zero-return benchmark and the economic test finds "
+    "no value over buy-and-hold. See docs/RESULTS.md."
+)
+
+CAVEATS = [
+    "No demonstrated predictive edge: log-return R2 is indistinguishable from "
+    "zero and the economic test finds no value over buy-and-hold "
+    "(docs/RESULTS.md).",
+    "The output is a single next-trading-day log return, not a price forecast; "
+    "the implied price is persistence-equivalent.",
+    "Metrics come from a ~210-row trending hold-out and are not a claim about "
+    "future performance.",
+    "Serving history shorter than ~400 rows differs from the full-history "
+    "feature frame in the MACD EMA seed (1.6e-4 at 89 rows, 1.1e-8 at 200).",
+]
+
+HOLDOUT_METRIC_KEYS = [
+    "n", "rmse", "mae", "r2_zero", "r2_histmean", "dir_acc",
+    "dm_p_one_sided", "boot_r2_lo", "boot_r2_hi", "std_pred", "std_actual", "corr",
 ]
 
 # --- Schemas ---
 
-class PredictionRequest(BaseModel):
-    """30 timesteps x 15 features, plus the price the return is applied to."""
 
-    features: List[List[float]] = Field(
-        ...,
-        min_length=SEQUENCE_LENGTH,
-        max_length=SEQUENCE_LENGTH,
-        description="Feature array of shape (30, 15)",
-    )
-    current_price: float = Field(
-        ...,
-        gt=0,
-        description="Current 18k gold price in IRR per gram",
-    )
+class DailyRow(BaseModel):
+    """One raw daily observation, in the units of the raw dataset."""
 
-    @field_validator("features")
-    @classmethod
-    def _validate_features(cls, value: List[List[float]]) -> List[List[float]]:
-        if not all(len(row) == N_FEATURES for row in value):
-            raise ValueError(f"Each feature row must have exactly {N_FEATURES} features")
-        arr = np.asarray(value, dtype=float)
-        if not np.isfinite(arr).all():
-            raise ValueError("Features must contain only finite numeric values")
-        return value
+    date: date_type
+    Gold_IRR: float
+    USD_IRR: float
+    Ounce_USD: float
+    Oil_USD: float
 
 
-class PredictionResponse(BaseModel):
-    success: bool
-    prediction: Dict[str, Any]
-    timestamp: str
+class PredictRequest(BaseModel):
+    rows: List[DailyRow]
 
 
 class HealthResponse(BaseModel):
@@ -92,48 +96,77 @@ class HealthResponse(BaseModel):
     timestamp: str
 
 
-# --- Lifespan ---
+# --- State and lifespan ---
 
-model_artifacts: Dict[str, Any] = {"predictor": None, "status": "startup"}
+state: Dict[str, Any] = {
+    "bundle": None,
+    "status": "startup",
+    "results": {},
+    "results_error": None,
+}
+
+
+def _read_json(path: Path) -> Optional[Dict[str, Any]]:
+    if not path.exists():
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _rel(path: Path) -> str:
+    """Path relative to the repo root when possible, else absolute."""
+    try:
+        return str(Path(path).relative_to(BASE_DIR))
+    except ValueError:
+        return str(path)
+
+
+def _load_results() -> None:
+    """Read the committed evaluation and backtest results, once, at startup."""
+    try:
+        state["results"] = {
+            "eval_V2": _read_json(PRIMARY_RESULTS),
+            "backtest": _read_json(BACKTEST_RESULTS),
+        }
+        missing = [p.name for p, v in ((PRIMARY_RESULTS, state["results"]["eval_V2"]),
+                                       (BACKTEST_RESULTS, state["results"]["backtest"]))
+                   if v is None]
+        if missing:
+            state["results_error"] = f"missing results file(s): {', '.join(missing)}"
+            logger.warning("Results files missing: %s", ", ".join(missing))
+    except (OSError, json.JSONDecodeError) as exc:
+        state["results_error"] = f"could not read results: {exc}"
+        logger.error("Could not read results: %s", exc)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load the model once at startup; never prevent the server from starting."""
-    missing = [
-        path.name
-        for path in (MODEL_PATH, SCALER_X_PATH, SCALER_Y_PATH)
-        if not path.exists()
-    ]
-    if missing:
-        model_artifacts["status"] = "model_missing"
-        logger.warning(
-            "Model artifacts missing (%s). Server starts; /predict returns 503.",
-            ", ".join(missing),
-        )
-    else:
-        try:
-            model_artifacts["predictor"] = GoldPricePredictor(
-                model_path=str(MODEL_PATH),
-                scaler_X_path=str(SCALER_X_PATH),
-                scaler_y_path=str(SCALER_Y_PATH),
-            )
-            model_artifacts["status"] = "ready"
-            logger.info("Model and scalers loaded from %s", MODEL_PATH)
-        except Exception as exc:  # keep /health alive for diagnosis
-            model_artifacts["status"] = "failed"
-            logger.error("Failed to load model: %s", exc)
+    """Load the model once; never prevent the server from starting."""
+    _load_results()
+    try:
+        state["bundle"] = load_bundle()
+        state["status"] = "ready"
+        logger.info("Serving %s", state["bundle"].metadata["artifact"])
+    except ArtifactMissing as exc:
+        state["status"] = "model_missing"
+        logger.warning("%s. Server starts; /predict returns 503.", exc)
+    except Exception as exc:  # keep /health alive for diagnosis
+        state["status"] = "failed"
+        logger.error("Failed to load model: %s", exc)
 
     yield
 
-    model_artifacts["predictor"] = None
-    model_artifacts["status"] = "shutdown"
+    state["bundle"] = None
+    state["status"] = "shutdown"
 
 
 app = FastAPI(
-    title="Gold Price Prediction API",
-    description="LSTM next-day return prediction for 18k gold in IRR per gram",
-    version="2.0.0",
+    title="Gold in IRR — honest next-day return model",
+    description=(
+        "Serves the committed stationary LSTM (seed 42, V2). The model has no "
+        "demonstrated predictive edge; see docs/RESULTS.md."
+    ),
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -152,36 +185,14 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
-PROTECTED_PATH_PREFIXES = ("/predict", "/model-info")
-EXEMPT_PATHS = ("/health", "/docs", "/openapi.json")
-
-
-@app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    if not RATE_LIMIT_ENABLED:
-        return await call_next(request)
-    path = request.url.path
-    if path in EXEMPT_PATHS:
-        return await call_next(request)
-    if not any(path.startswith(prefix) for prefix in PROTECTED_PATH_PREFIXES):
-        return await call_next(request)
-
-    key = client_key(request)
-    if not rate_limiter.allow(key):
-        return JSONResponse(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            content={"detail": "Rate limit exceeded"},
-            headers={"Retry-After": str(rate_limiter.retry_after_seconds(key))},
-        )
-    return await call_next(request)
-
 
 # --- Endpoints ---
 
+
 @app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Liveness plus whether the model artifacts were loaded."""
-    is_ready = model_artifacts["status"] == "ready"
+def health_check():
+    """Liveness plus whether the artifacts were loaded. No auth, no model call."""
+    is_ready = state["status"] == "ready"
     return HealthResponse(
         status=is_ready,
         model_loaded=is_ready,
@@ -189,52 +200,150 @@ async def health_check():
     )
 
 
-@app.get("/model-info")
-async def get_model_info(_: None = Depends(require_api_key)):
-    """Shape, parameter count and expected feature order of the loaded model."""
-    predictor = model_artifacts.get("predictor")
-    if predictor is None:
+def _require_bundle() -> ServingBundle:
+    bundle = state["bundle"]
+    if bundle is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Model not loaded (status: {model_artifacts['status']})",
+            detail={
+                "code": "model_not_loaded",
+                "message": f"model artifacts not loaded (status: {state['status']})",
+            },
         )
+    return bundle
+
+
+def _metric_summary(block: Dict[str, Any]) -> Dict[str, Any]:
+    """Selected metrics, with undefined (NaN) values as null, not NaN."""
+    out = {}
+    for model, metrics in block.items():
+        row = {}
+        for k in HOLDOUT_METRIC_KEYS:
+            v = metrics.get(k)
+            row[k] = v if not (isinstance(v, float) and not np.isfinite(v)) else None
+        out[model] = row
+    return out
+
+
+@app.get("/model-info")
+def get_model_info(_: None = Depends(require_api_key)):
+    """Artifact metadata and the committed metrics, both read from disk."""
+    bundle = _require_bundle()
+    results = state["results"]
+    eval_v2 = results.get("eval_V2") or {}
+    backtest = results.get("backtest") or {}
+
+    evaluation = None
+    if eval_v2:
+        evaluation = {
+            "source": _rel(PRIMARY_RESULTS),
+            "variant": eval_v2.get("metadata", {}).get("variant"),
+            "walkforward": _metric_summary(eval_v2.get("walkforward", {})),
+            "holdout": _metric_summary(eval_v2.get("holdout", {})),
+            "edge_verdict": eval_v2.get("edge_verdict"),
+        }
+
+    economic = None
+    if backtest:
+        economic = {
+            "source": _rel(BACKTEST_RESULTS),
+            "verdict": backtest.get("verdict"),
+            "costs": backtest.get("metadata", {}).get("costs"),
+            "period": backtest.get("metadata", {}).get("period"),
+        }
+
     return {
-        "model_path": predictor.model_path,
-        "input_shape": str(predictor.model.input_shape),
-        "output_shape": str(predictor.model.output_shape),
-        "total_parameters": int(predictor.model.count_params()),
-        "expected_features": {
-            "sequence_length": SEQUENCE_LENGTH,
-            "n_features": N_FEATURES,
-            "feature_names": FEATURE_NAMES,
+        "model_id": bundle.model_id,
+        "metadata": bundle.metadata,
+        "metadata_source": _rel(bundle.metadata_path),
+        "input_contract": {
+            "method": "POST /predict",
+            "body": {"rows": "list of daily rows, oldest first"},
+            "required_columns": RAW_PRICE_COLUMNS,
+            "units": {
+                "Gold_IRR": "Rial per gram, 18k (geram18)",
+                "USD_IRR": "Rial per USD",
+                "Ounce_USD": "USD per ounce",
+                "Oil_USD": "USD per barrel",
+            },
+            "min_rows": MIN_HISTORY_ROWS,
+            "max_rows": MAX_HISTORY_ROWS,
+            "sequence_length": bundle.sequence_length,
+            "n_features": bundle.n_features,
+            "feature_columns": bundle.feature_columns,
+            "target": "next_trading_day_log_return",
         },
+        "evaluation": evaluation,
+        "economic": economic,
+        "results_error": state["results_error"],
+        "statement": STATEMENT,
     }
 
 
-@app.post("/predict", response_model=PredictionResponse)
-async def predict_price(request: PredictionRequest, _: None = Depends(require_api_key)):
-    """Predict the next day's gold price from a (30, 15) feature window."""
-    predictor = model_artifacts.get("predictor")
-    if predictor is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Model not loaded (status: {model_artifacts['status']})",
-        )
+@app.post("/predict")
+def predict(request: PredictRequest, _: None = Depends(require_api_key)):
+    """
+    Predict the next trading day's log return from recent raw daily rows.
+
+    Synchronous on purpose: FastAPI runs plain ``def`` endpoints in its
+    threadpool, so the blocking Keras call never sits on the event loop.
+    """
+    bundle = _require_bundle()
+
+    frame = pd.DataFrame([
+        {
+            "Date": row.date,
+            "Gold_IRR": row.Gold_IRR,
+            "USD_IRR": row.USD_IRR,
+            "Ounce_USD": row.Ounce_USD,
+            "Oil_USD": row.Oil_USD,
+        }
+        for row in request.rows
+    ])
 
     try:
-        features = np.asarray(request.features, dtype=float)
-        result = predictor.predict_price(features, request.current_price)
-        return PredictionResponse(
-            success=True,
-            prediction=result,
-            timestamp=datetime.now().isoformat(),
-        )
-    except Exception as exc:
-        logger.error("Prediction error: %s", exc)
+        model_input = prepare_model_input(frame, seq_len=bundle.sequence_length)
+    except InputError as exc:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {exc}",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": exc.code, "message": exc.message},
         ) from exc
+
+    log_return = bundle.predict_log_return(model_input.X)
+    simple_return = float(np.expm1(log_return))
+
+    warnings: List[str] = []
+    age_days = (datetime.now(timezone.utc).date() - model_input.last_date.date()).days
+    if age_days > STALE_AFTER_DAYS:
+        warnings.append(
+            f"stale_input: last date {model_input.last_date.date()} is {age_days} "
+            f"days old (limit {STALE_AFTER_DAYS})"
+        )
+
+    return {
+        "prediction": {
+            "target": "next_trading_day_log_return",
+            "log_return": log_return,
+            "simple_return": simple_return,
+            "persistence_log_return": 0.0,
+            "implied_next_price_persistence_equivalent": float(
+                model_input.last_close * np.exp(log_return)
+            ),
+        },
+        "model": bundle.metadata,
+        "model_metadata_source": _rel(bundle.metadata_path),
+        "input": {
+            "last_date": str(model_input.last_date.date()),
+            "rows_used": model_input.n_rows_input,
+            "feature_rows": model_input.n_feature_rows,
+            "sequence_length": bundle.sequence_length,
+            "last_close_irr": model_input.last_close,
+        },
+        "warnings": warnings,
+        "caveats": CAVEATS,
+        "statement": STATEMENT,
+        "timestamp": datetime.now().isoformat(),
+    }
 
 
 if __name__ == "__main__":
