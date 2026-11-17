@@ -1,6 +1,6 @@
 # Refactor Plan — Honest Portfolio Piece (B-lite)
 
-**Status:** Stages 0–5a complete; **5b (reproducibility, Docker, CI, README) pending** ·
+**Status:** Stages 0–5b complete; **GATE 5b pending owner review** ·
 **Branch:** `refactor/honest-portfolio` · **Baseline tag:** `legacy-pre-refactor` (→ `d1670cc`)
 **Source of truth for the "before" state:** `docs/AUDIT_REPORT.md` (2026-11-13, read-only audit of `d1670cc`)
 
@@ -17,7 +17,7 @@
 | 3 | done | `798981a`, `cb75162`, `37585ac`, `8d7715e`, `64c9798`, `5f4abaa` | no demonstrated edge; GATE 3 accepted; verdict final |
 | 4 | done | `1e3e634`, `0cc0647`, `9b9caca`, `cf09f8d`, `3b5ac3a` | economic reality: no added value over buy-and-hold; `trading_bot/` removed |
 | 5a | done | `1768b2e`, `f587864`, `1bd4a5b`, `f749791`, `e9d65e0` | serving: API + Streamlit on the seed-42 artifact; one feature function; 79 tests |
-| 5b | pending | — | reproducibility, Docker, CI, README |
+| 5b | done | `e6f8210`, `d59dc34`, `60e9870`, `1cf8285`, `361b195`, `eed9ee0`, `539f92b`, `369f151`, `13ce2c6` | reproducibility, Docker, CI, README; 83 tests |
 
 ---
 
@@ -276,29 +276,52 @@ Not changed: `results/`, `models/`, `docs/EVAL_PROTOCOL.md`, `docs/BACKTEST_PROT
 
 ---
 
-## Stage 5b — Reproducibility, Docker, CI, README
+## Stage 5b — Reproducibility, Docker, CI, README (executed)
 
 ### Checklist
-- [ ] `make train`, `make test`, `make api` work from a clean clone.
-- [ ] Minimal GitHub Actions workflow: install, lint, test.
-- [ ] One-command Docker that actually builds (audit: current build did not finish in ~12 min;
-      base image unpinned).
-- [ ] Final `README.md`: measured numbers only, units in **Rial**, the Stage 3 negative result,
-      the Stage 4 economic numbers, a "Findings / Negative Result" section and a "Lessons
-      Learned" section.
-- [ ] Delete the chat artifact at the current `README.md:600` and the `trading_bot/`
-      instructions (the directory is gone; the tag preserves it).
+- [x] `make install`, `make test`, `make check`, `make api`, `make app`, `make docker-build`,
+      `make docker-run`, `make evaluate`, `make backtest`, `make fetch-data` exist and are
+      documented in the README.
+- [x] Minimal GitHub Actions workflow: Python 3.12, pip cache, `requirements-dev.txt`,
+      `make check`. No network tests, no training, no data fetch.
+- [x] One-command Docker image that actually builds; base image pinned by tag and digest;
+      non-root; healthcheck on `/health`; no raw data or legacy artifacts.
+- [x] Final `README.md` from scratch: measured numbers only, units in **Rial**, the Stage 3
+      negative result, the Stage 4 economic numbers, limitations and lessons learned.
+- [x] The old chat artifact and `trading_bot/` instructions are gone (the tag preserves them).
+- [x] `LICENSE` (MIT, data excluded), notebooks cleared and moved under `notebooks/exploratory/`,
+      the legacy model removed, `.gitignore` updated for opt-in predictions.
+- [x] README numbers cannot drift: 58 marked blocks checked against `results/*.json`;
+      `docs/README_CLAIMS.md` records every claim with its source.
 
-### Deliverables
-`Makefile`, `.github/workflows/ci.yml`, working `Dockerfile` + `docker-compose.yml`, final
-`README.md`, `docs/LESSONS.md`.
+### Executed — Stage 5b
+- `e6f8210` — release plan committed **before** any Stage 5b change.
+- `d59dc34` — root `test_pipeline.py` moved to `tests/`; one `pytest` command collects all
+  **83** tests (the old 44 = 30 under `tests/` + 14 at the root; plain `pytest` saw only 30).
+- `60e9870` — runtime/development dependency split; `tensorflow-cpu` for serving; Python 3.12.
+- `1cf8285` — MIT `LICENSE`, predictions ignored, notebooks cleared and moved, legacy model
+  removed.
+- `361b195` — single-service Dockerfile, digest-pinned, non-root, healthcheck; HF Space port
+  config removed; one-service compose kept and documented.
+- `eed9ee0` — CI workflow.
+- `539f92b` — opt-in `--save-predictions`; scratch smoke run under `/tmp`; note in
+  `docs/RESULTS.md` that the headline numbers predate the flag.
+- `369f151` — final `README.md`, `docs/README_CLAIMS.md`, `scripts/check_readme_numbers.py`,
+  `tests/test_readme_numbers.py`.
+- `13ce2c6` — Makefile and `scripts/fetch_data.py`.
 
-### Acceptance criterion (must be runnable)
+Footprint, Docker evidence, YAML parse and the final acceptance outputs are in
+`docs/STATE.md` → "Stage 5b acceptance outputs".
+
+### Acceptance criterion (as executed)
 ```bash
-make test && make train && make eval           # exits 0
-docker build -t gold-portfolio .               # exits 0
-python scripts/check_readme_numbers.py         # every number in README traces to a committed file
+make check                                      # 83 passed + 58 marked numbers
+docker build -t gold-irr-honest-forecasting .   # see STATE for the measured result
+python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"
 ```
+
+The old `make train` / `make eval` names are superseded by `make evaluate`; the old
+`scripts/check_readme_numbers.py` name is kept as written.
 
 ---
 
@@ -312,4 +335,4 @@ python scripts/check_readme_numbers.py         # every number in README traces t
 | 3 | Modeling + evaluation | **GATE 3** — review before narrative |
 | 4 | Economic reality (backtest on saved predictions) | none |
 | 5a | Serving (API + Streamlit) | none |
-| 5b | Repro + docs | none |
+| 5b | Repro + docs | **GATE 5b** — owner reviews the release; no merge by the assistant |
