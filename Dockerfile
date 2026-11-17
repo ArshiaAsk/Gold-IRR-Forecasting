@@ -20,8 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
+# The retry flags are deliberate: the reference network drops long downloads.
+# They do not change what is installed, only how patiently pip fetches it.
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir --timeout 120 --retries 20 --resume-retries 50 \
+        -r requirements.txt
 
 # Non-root runtime user. UID is fixed so volume permissions are predictable.
 RUN useradd --create-home --uid 10001 appuser \
