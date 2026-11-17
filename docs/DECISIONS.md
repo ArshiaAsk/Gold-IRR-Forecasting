@@ -505,6 +505,72 @@ evaluation-primitive prediction exactly.
 
 ---
 
+## D31 — GATE 5a accepted: packaging and presentation decisions
+
+**Date:** 2026-11-17 · **Status:** accepted (owner) · **Closes GATE 5a**
+
+The owner accepted Stage 5a and fixed the release framing:
+
+1. **The Docker image is the primary deliverable.** A hosted Streamlit Community Cloud app is
+   best-effort only. `tensorflow-cpu` is measured as the runtime dependency; if it serves the
+   artifact and installs plausibly within the official limits, it is used. If it does not, work
+   stops and the owner is asked before any fallback (the fallback under consideration is a
+   hosted demo from precomputed predictions, clearly labelled; it was not built).
+2. **README:** English. Title *Forecasting Iranian Gold (IRR): an end-to-end pipeline and an
+   honest negative result*. Suggested repository name `gold-irr-honest-forecasting` is used in
+   documentation only; nothing is renamed in this stage.
+3. **License:** MIT for the code, with the data explicitly excluded.
+4. **Merge:** the assistant does not merge or push. The owner merges after review, without
+   squashing.
+
+**Consequence:** Stage 5b packages the committed artifacts, documents the hosting measurement
+and does not retrain or re-score anything.
+
+---
+
+## D32 — Stage 5b release mechanics: one test command, split deps, opt-in predictions
+
+**Date:** 2026-11-17 · **Status:** accepted · **Executed in Stage 5b**
+
+1. **One test command.** The root `test_pipeline.py` moves to `tests/test_pipeline.py`, so
+   `pytest.ini` (`testpaths = tests`) collects everything. The Stage 4 "44 passed" was 30 tests
+   under `tests/` plus 14 in the root file; plain `pytest` collected only 30. After the move the
+   suite is **83 passed** with no test added or removed by the move itself (79 before the two
+   new Stage 5b files).
+2. **Runtime vs development dependencies.** `requirements.txt` is the serving path
+   (`tensorflow-cpu`, Keras, NumPy, pandas, scikit-learn, joblib, FastAPI, uvicorn, Streamlit,
+   Plotly). `requirements-dev.txt` adds pytest, httpx, yfinance, curl_cffi, matplotlib and
+   seaborn. Python **3.12** is pinned in the Dockerfile and CI.
+3. **Per-row predictions are opt-in and gitignored.** `src/evaluate.py --save-predictions`
+   writes `<out-dir>/predictions/<variant>_<sample>.csv`. The flag is off by default, no
+   committed result was re-run, and `results/predictions/` is ignored: the rows carry hold-out
+   labels and are reproducible, so committing them would add peeking surface without adding a
+   deliverable.
+4. **Docker.** One image, Python 3.12 slim bookworm pinned by tag and digest, non-root UID
+   10001, `HEALTHCHECK` on `/health`, API on 8000 by default and Streamlit from the same image
+   by overriding the command. No raw data, tests, notebooks or legacy model files. The compose
+   file keeps one service because it documents port, auth env and healthcheck in one place.
+5. **CI.** `.github/workflows/ci.yml` runs on push and pull request: checkout, Python 3.12 with
+   pip cache, `pip install -r requirements-dev.txt`, `make check`. No network tests, no data
+   fetch, no training.
+6. **README drift is a test.** Numbers that must not drift are wrapped in
+   `<!-- num:... -->value<!-- /num -->` blocks; `scripts/check_readme_numbers.py` re-reads them
+   from `results/*.json` with a rounding tolerance. `docs/README_CLAIMS.md` records every
+   quantitative and status claim with its source and verification.
+7. **Stale artifacts removed.** The tracked legacy `models/gold_lstm_v2.keras` and the ignored
+   `scaler_X.pkl` / `scaler_y.pkl` are gone; the tag preserves them. Notebooks moved to
+   `notebooks/exploratory/`, outputs cleared and a banner added; the absolute local path was
+   replaced with a relative one.
+8. **Correction to a Stage 2b statement.** `docs/STATE.md` said `API_KEY_REQUIRED` toggles
+   authentication. That was true in Stage 2b but is **not** true after the Stage 5a rewrite:
+   `src/api/security.py` reads only `API_KEY` and fails closed. The Makefile, compose file and
+   README use `API_KEY`; no code reads `API_KEY_REQUIRED`.
+
+**Consequence:** the release is reproducible from the committed tree with one test command, a
+pinned image and a README whose numbers cannot silently drift.
+
+---
+
 ## Open decisions
 
 These are the owner's calls. Each names the stage it blocks.
