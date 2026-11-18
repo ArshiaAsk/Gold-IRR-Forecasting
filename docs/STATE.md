@@ -1,7 +1,10 @@
 # Project State
 
-**Date:** 2026-11-17
-**Stage:** Stages 3, 4, 5a and 5b complete. GATE 3 accepted ("no demonstrated edge" final); GATE 4 accepted (D29: no added value over buy-and-hold, no re-runs, seed-42 artifact served); GATE 5a accepted (D31); **stopped at GATE 5b** for owner review. No merge, no push, no release tag.
+**Date:** 2026-11-18
+**Stage:** Stages 3, 4, 5a, 5b and 6 complete. GATE 3 accepted ("no demonstrated edge" final);
+GATE 4 accepted (D29: no added value over buy-and-hold, no re-runs, seed-42 artifact served);
+GATE 5a accepted (D31); GATE 5b accepted (D33: Docker is the only deployment deliverable).
+Stage 6 release fixes applied. No merge, no push, no release tag.
 **Branch:** `refactor/honest-portfolio`
 **Baseline tag:** `legacy-pre-refactor` → `d1670cc` (annotated)
 **Pre-refactor description:** `docs/AUDIT_REPORT.md` (2026-11-13)
@@ -132,15 +135,16 @@
   removed, absolute notebook path replaced.
 - **README** (`369f151`): rewritten from scratch, 319 lines, 58 marked numbers checked against
   `results/*.json`; `docs/README_CLAIMS.md` records every claim and its verification.
-- **One hygiene item left on purpose.** `results/run.log` and `results/backtest.log` contain the
-  reference machine's absolute paths (`Wrote /home/…/results/eval_V2.json`). They are committed
-  run logs and the Stage 5b rules forbid changing anything under `results/`, so they were left
-  alone. Nothing secret is in them; they are the only absolute paths left outside `docs/`.
+- **Absolute paths in the run logs.** `results/run.log` and `results/backtest.log` contained
+  the reference machine's absolute paths (`Wrote <REPO>/results/eval_V2.json`). Stage 5b left
+  them alone; Stage 6 replaced only the path string with `<REPO>` (D34), with a masked-diff
+  and digit-checksum proof in the Stage 6 section. Nothing secret was in them.
 
 ## Next
 
-**GATE 5b — owner review of the release.** The branch is complete and is **not** merged or
-pushed. The owner merges after review without squashing. No release tag has been created.
+**Owner merge and tag.** GATE 5b is accepted (D33). The branch is complete and is **not**
+merged or pushed. The owner merges without squashing after the Stage 6 report and an
+independent review, then tags the release. No release tag has been created.
 
 ### README checklist for Stage 5b (owner-mandated, D29) — all present
 
@@ -156,8 +160,9 @@ pushed. The owner merges after review without squashing. No release tag has been
 
 ## Blockers
 
-None. G1-final is resolved by D19; O1–O8 are resolved as D10–D17; Stages 3, 4, 5a and 5b are
-complete. The only unresolved item is the owner's GATE 5b review.
+None. G1-final is resolved by D19; O1–O8 are resolved as D10–D17; Stages 3, 4, 5a, 5b and 6
+are complete. The remaining items are the owner's merge/tag and the TODOs listed in the
+Stage 6 verification block.
 
 ## Known stale artifacts
 
@@ -313,7 +318,7 @@ PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
 
 ```
 platform linux -- Python 3.12.3, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/arshiaask/projects/Gold_Usd_Oil_IRR
+rootdir: <REPO>
 configfile: pytest.ini
 plugins: anyio-3.7.1, Faker-40.43.0
 collected 20 items
@@ -786,6 +791,168 @@ pipeline code. The counts are measured after the Stage 5b documentation commits.
 * CI has never executed on GitHub (no remote push). The YAML and every command were replayed
   locally; the first real run is the owner's.
 * Merge the branch after review, without squashing. No release tag exists.
+
+## Stage 6 acceptance outputs
+
+All commands run on `refactor/honest-portfolio`, 2026-11-18, Python 3.12.3. Stage 6 is limited
+to release fixes: no retraining, no re-scoring, no changes to committed numeric results (the
+only `results/` change is the path redaction in D34).
+
+### 1. API field names and tests
+
+`POST /predict` now accepts the sample CSV header verbatim. `src/api/main.py` declares
+`date` with `pydantic.AliasChoices("date", "Date")` and a before-validator rejects `date` /
+`Date` with different values. The four price fields already matched the CSV.
+
+Four tests were added to `tests/test_api_contract.py` (none removed):
+
+* `test_sample_csv_header_is_accepted_verbatim` — posts
+  `json.loads(pd.read_csv(...).to_json(orient="records"))` with keys
+  `Date,Gold_IRR,USD_IRR,Ounce_USD,Oil_USD`; asserts 200 and
+  `log_return == -0.00045206130016595125`.
+* `test_lowercase_date_form_still_works` — the old `date` form returns the same value.
+* `test_conflicting_date_aliases_are_rejected` — both aliases with different values → 422.
+* `test_matching_date_aliases_are_accepted` — both with the same value → 200.
+
+**Sample parity proof:** the verbatim-header request returned HTTP 200 with
+`log_return = -0.00045206130016595125`, exactly the committed Stage 5a/5b parity value. The
+full suite is **87 passed** (83 before Stage 6).
+
+### 2. README example
+
+The README's "predict from the sample" script reads the CSV with pandas and posts the rows
+without renaming. It was executed against a local server on 2026-11-18; the captured
+`log_return` is `-0.00045206130016595125`, `rows_used` 200, `feature_rows` 141, and the
+stale warning says 158 days. `make check` re-ran and the 58 marked numbers still match.
+
+### 3. Log redaction proof (D34)
+
+`results/run.log` and `results/backtest.log` had the absolute repository path replaced by
+`<REPO>`; nothing else changed.
+
+| File | Lines before/after | Path replacements | Digit SHA-256 before = after |
+|---|---:|---:|---|
+| `results/run.log` | 87 / 87 | 6 | `4a3e59bb4515a494d173f9881a1a18a46e915743b6e588e8b4e7bd03ab76994b` |
+| `results/backtest.log` | 10 / 10 | 1 | `eec5f611e4779e78d16faf09a50dd501accca5f66267d9309f6f3f0d03149ddc` |
+
+Proof:
+
+* Masking the old path to `<REPO>` on both sides gives an empty diff (`diff -u` on the
+  masked files → no output).
+* Replacing `<REPO>` back with the old path reconstructs the pre-edit bytes exactly
+  (`after.replace(b"<REPO>", old_path) == before` → True for both files).
+* The digit-only SHA-256 is identical before and after (table above).
+* `grep -c "/home/"` → 0 in both files after the edit.
+* `git diff --word-diff` shows only the path strings changing; every timestamp, metric and
+  line count is unchanged.
+
+### 4. Deployment-reference grep
+
+Tracked-tree grep after the cleanup found no match for the vendor name, the platform port,
+or the vendor's cloud product name. The only matches for the `host` substring are
+`files.pythonhosted.org` in the README/STATE network notes — the Python package index, not a
+managed app. Docker is the only deployment deliverable (D33).
+
+### 5. Docker rebuild and run
+
+The image was rebuilt because `src/` and `results/` are copied into it. The dependency layer
+was cached; the rebuild took **1 s** (`BUILD_SECONDS=1`). The image is
+`gold-irr-honest-forecasting:latest`, ID `38287aaa10d8`, **2.99 GB** on disk
+(`docker image inspect .Size` = **603,727,316 bytes**); the `pip install` layer remains
+2.24 GB.
+
+```
+$ docker run -d --name gold-irr-stage6 -p 18081:8000 -e API_KEY=demo-key gold-irr-honest-forecasting
+$ curl -sS http://127.0.0.1:18081/health
+{"status":true,"model_loaded":true,"timestamp":"2026-11-18T08:00:13.729150"}
+```
+
+`POST /predict` with the 200-row sample posted with the CSV's original header
+(`Date,Gold_IRR,USD_IRR,Ounce_USD,Oil_USD`):
+
+```json
+{
+  "prediction": {
+    "target": "next_trading_day_log_return",
+    "log_return": -0.00045206130016595125,
+    "simple_return": -0.00045195913585182153,
+    "persistence_log_return": 0.0,
+    "implied_next_price_persistence_equivalent": 172130169.0211332
+  },
+  "input": {"last_date": "2026-06-13", "rows_used": 200, "feature_rows": 141,
+            "sequence_length": 30, "last_close_irr": 172208000.0},
+  "warnings": ["stale_input: last date 2026-06-13 is 158 days old (limit 7)"]
+}
+```
+
+Wrong key:
+
+```text
+HTTP 401 {"detail": {"code": "invalid_api_key", "message": "Invalid or missing API key"}}
+```
+
+The container's own `HEALTHCHECK` reports `Status: healthy` with a successful `/health`
+probe; it runs as `uid=10001(appuser)`. The rebuilt image contains the new code
+(`grep AliasChoices /app/src/api/main.py` matches) and the redacted logs
+(`grep -c "/home/"` → 0). The container was stopped and removed; the image is kept.
+
+### 6. Final verification
+
+The absolute root path in the raw `make check` output is shown as `<REPO>`; the run itself
+used the local path.
+
+```text
+$ make check
+.venv/bin/python -m pytest -q
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.2.0, pluggy-1.7.0
+rootdir: <REPO>
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-3.7.1, Faker-40.43.0
+collected 87 items
+
+tests/test_api_contract.py .......................                       [ 26%]
+tests/test_backtest_check.py .........                                   [ 36%]
+tests/test_data_loader_date_shift.py ......                              [ 43%]
+tests/test_eval_protocol.py ...............                              [ 60%]
+tests/test_pipeline.py ..............                                    [ 77%]
+tests/test_predictions_export.py ..                                      [ 79%]
+tests/test_readme_numbers.py ..                                          [ 81%]
+tests/test_serving_parity.py ........                                    [ 90%]
+tests/test_streamlit_app.py ........                                     [100%]
+
+======================= 87 passed, 23 warnings in 19.31s =======================
+.venv/bin/python scripts/check_readme_numbers.py
+README number check passed: 58 marked numbers match results/*.json
+```
+
+**Test count:** 87 passed (83 before Stage 6; four API tests added, none removed).
+
+**`git status`:** clean after the Stage 6 commits.
+
+**Branch log** (the commit adding this block is the next one; this is its parent history):
+
+```text
+5bc9516 docs(readme): record the Stage 6 Docker rebuild measurement
+383000d chore(results): redact absolute paths from the committed run logs
+833fe0d docs: remove managed-deployment references
+5917b80 docs(decisions): record GATE 5b acceptance and the Docker-only decision
+d293c75 docs(readme): add a runnable sample prediction and exact field names
+15f4cda fix(api): accept the sample CSV header verbatim
+2423b80 docs: add the Stage 6 release-fix plan
+```
+
+**Remaining TODOs for the owner:**
+
+* `LICENSE`: replace `<TODO: copyright holder>`.
+* `README.md`: author, contact, citation, and TGJU permission status are `TODO`.
+* TGJU permission: confirm whether redistribution is allowed; the 200-row sample is bundled
+  pending that answer.
+* Registry push: the image exists only in this machine's Docker daemon.
+* GitHub push and the first CI run: CI has never executed on GitHub.
+* Merge `refactor/honest-portfolio` without squashing, then tag. No merge, push or tag was
+  done in Stage 6.
 
 ## Not verified in this session
 
