@@ -175,8 +175,11 @@ Measured on the reference machine: the image is **2.99 GB** on disk, of which th
 much quicker. A Stage 6 rebuild that changed only application files reused the cached
 dependency layer and took **1 s**; the image ID changed and the size stayed **2.99 GB** on
 disk (`docker image inspect` reports 603,727,316 bytes). The running container reports
-`healthy` and returns `-0.00045206130016595125` for the sample below, bit-identical to the
-value from a local run.
+`healthy` and returns `-0.00045206130016595125` for the bundled sample as shipped,
+bit-identical to the value from a local run. That identity is a property of this sample file,
+not of any refreshed series: replacing only the sample's `Ounce_USD` column with the complete
+global series changes the prediction to `-0.0004350765375420451` (difference +1.70e-05),
+because the sample carries a June-2026 ounce vintage (see `data/sample/README.md`).
 
 The image contains the model, scalers, metadata, `results/` JSON and the 200-row sample. It
 does not contain `data/raw`, `data/processed`, tests, notebooks or `.env`.
@@ -250,8 +253,10 @@ response also carries the model metadata, four caveats and a timestamp):
 }
 ```
 
-The `log_return` is bit-identical to the value in the Docker section and to the committed
-serving output. The stale day count grows with the calendar.
+For the bundled sample as shipped, the `log_return` is bit-identical to the value in the
+Docker section and to the committed serving output. A refreshed global ounce series changes it
+to `-0.0004350765375420451` (difference +1.70e-05); see `data/sample/README.md`. The stale day
+count grows with the calendar.
 
 **Why 89 rows minimum.** The longest lookback is the 60-row SMA, which leaves the first feature
 row at index 59; the model needs 30 consecutive feature rows, so 59 + 30 = 89. An 88-row

@@ -19,5 +19,61 @@ byte-identical.
 
 ## Sample-vintage investigation
 
-Filled in by the sample-vintage commit (item 1). Until then this section is a placeholder, not
-a finding.
+Investigated before changing anything, read-only.
+
+**What the artifact was trained on.** `models/gold_lstm_stationary_v2.metadata.json` records
+`git_commit: 8d7715e`, `date_utc: 2026-11-14T14:54:57+00:00`, training window 2021-08-28 →
+2024-12-31 and validation window 2025-02-08 → 2025-09-30. `results/run.log` records the same run
+starting at `2026-11-14 18:03:57,480` and the inputs: "Raw prices: 1424 rows
+2021-06-14..2026-06-13; global series: 1265 rows 2021-06-04..2026-06-12". The two untracked
+files are:
+
+| File | Rows | mtime (download) | SHA-256 |
+|---|---:|---|---|
+| `data/raw/final_gold_dataset.csv` | 1,424 | 2026-06-14 13:34:33 +03:30 | `132992b8…76eb` |
+| `data/raw/global_yahoo.csv` | 1,265 | 2026-11-14 18:01:19 +03:30 | `a9cc017a…855e` |
+
+So the artifact saw a June-2026 Iranian snapshot plus a November-2026 Yahoo refresh. The full
+manifest is `docs/DATA_MANIFEST.md`.
+
+**Is the sample the tail of the training snapshot?** Two answers, and they differ:
+
+* It is the **exact tail** of `data/raw/final_gold_dataset.csv`: all four columns of the last
+  200 rows match (2025-10-14 → 2026-06-13).
+* It is **not** the tail of the training frame built from that file plus `global_yahoo.csv`.
+  `Gold_IRR`, `USD_IRR` and `Oil_USD` match on all 200 rows; `Ounce_USD` differs on **188 of
+  200** rows, maximum absolute difference **35.5 USD**. The sample carries the source file's
+  June-2026 ounce vintage; the training frame carries the November-2026 Yahoo vintage.
+
+**The reviewer's three numbers, reproduced.**
+
+| Observation | Sample as shipped | Refreshed global series | Difference |
+|---|---:|---:|---:|
+| `Ounce_USD` on 2026-06-13 | 4090.300048828125 | 4238.7998046875 | 148.499755859375 |
+| Served `log_return` | −0.00045206130016595125 | −0.0004350765375420451 | +1.698476e−05 (3.76%) |
+| `ounce_ret_lag1` on 2026-05-17 | 0.0 | −0.026690724101015917 | 0.0266907241 |
+
+The refreshed prediction is reproduced exactly by replacing **only** the sample's `Ounce_USD`
+column with the complete global series reindexed onto the sample dates with `ffill`; the oil
+column is left as shipped. The 4238.80 value is the 2026-06-12 global bar, forward-filled to
+the sample's last row 2026-06-13. The 2026-05-17 shift appears because the source CSV has no
+2026-05-15 global bar (the sample's ounce is flat 2026-05-14 → 2026-05-17), while a refreshed
+global pull does.
+
+**Cause: a different global vintage (download date), not a TGJU revision and not a date shift.**
+The Iranian columns are byte-identical; only the global ounce column differs. The sample was
+cut on 2026-11-14 from a raw file downloaded 2026-06-14, whose Yahoo columns were already
+merged and forward-filled onto the Iranian grid and therefore lack global bars on non-Iranian
+dates (2026-05-15 and 2026-06-12). Stage 3 fetched a fresh global series on 2026-11-14 and
+trained against it. The training frame itself is not the reviewer's refreshed frame: its
+left-join + `ffill` drops the 2026-06-12 bar (not an Iranian date), so it uses 4114.0 on
+2026-06-13, while a date-aligned refresh uses 4238.8. Both are later vintages than the sample.
+Cause is determined; nothing here is UNKNOWN.
+
+**Fix.** `data/sample/README.md` states the source, creation date, row range and both hashes,
+and says the sample does not match the training vintage. `docs/DATA_MANIFEST.md` is a hash-only
+manifest. `tests/test_sample_manifest.py` pins the sample SHA-256 (and the untracked hashes when
+present). The README now qualifies the "bit-identical" sentence: it holds for the bundled
+sample as shipped, and refreshing the ounce column changes the prediction to −0.0004350765.
+The model artifact was **not** regenerated.
+
