@@ -402,7 +402,32 @@ source.
 
 Citation and contact are placeholders for the repository owner to fill:
 
-* **Author / maintainer:** TODO
-* **Contact:** TODO
-* **How to cite:** TODO (suggested repository name: `gold-irr-honest-forecasting`)
-* **Data permission status:** TODO (state whether TGJU permission was granted)
+* **Author / maintainer:** 
+Built by ArshiaAsk as a hands-on project in end-to-end ML engineering and honest model evaluation.
+GitHub: [https://github.com/ArshiaAsk]
+
+* **Contact:** 
+m.arshiaaskarzadeh@gmail.com
+Issues and corrections are welcome, especially anything that contradicts a number
+or claim in this repository.
+
+* **How to cite:** If you reference this work, please cite it as:
+
+    @software{gold_irr_honest_forecasting,
+      author  = {Askarzadeh, Arshia},
+      title   = {Forecasting Iranian Gold (IRR): an end-to-end pipeline and an honest negative result},
+      year    = {2026},
+      version = {1.0.0},
+      url     = {https://github.com/ArshiaAsk/Gold-AI-Bot}
+    }
+* **Data permission status:** The code is released under the MIT License. **The license does not cover the data.**
+
+- Iranian gold (18-karat gram, IRR) and USD/IRR prices were collected from TGJU;
+  gold ounce (GC=F) and Brent (BZ=F) prices come from Yahoo Finance.
+- I have not obtained permission from either source to redistribute their data.
+  For that reason the full dataset is not included. The repository ships only a
+  200-row sample (`data/sample/`), used to demonstrate the API and the app.
+- `make fetch-data` downloads the data from the original sources. If you use it, you are
+  responsible for complying with their terms of use. The scrapers may break at any time
+  if those sites change.
+- If you are a rights holder and want the sample removed, contact me and I will remove it.
