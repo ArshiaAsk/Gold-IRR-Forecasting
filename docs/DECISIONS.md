@@ -596,6 +596,23 @@ change committed numeric results.
 
 ---
 
+## D34 — Stage 6 log redaction is a narrow exception to "do not touch `results/`"
+
+**Date:** 2026-11-18 · **Status:** accepted · **Executed in Stage 6**
+
+`results/run.log` and `results/backtest.log` are committed run logs and normally frozen. In
+Stage 6 only, the reference machine's absolute repository path is replaced by `<REPO>`; no
+digit, timestamp, metric or other character changes. The proof is recorded in
+`docs/STATE.md` (masked diff, unchanged line counts, equal digit checksum). If the proof had
+failed, the logs would have been reverted unchanged.
+
+**Reason:** the logs exposed a local home-directory path in a public portfolio repository.
+
+**Scope:** exactly those two files and exactly the path string. No other file under `results/`
+is touched.
+
+---
+
 ## D35 — The API accepts the sample CSV header verbatim
 
 **Date:** 2026-11-18 · **Status:** accepted · **Executed in Stage 6**

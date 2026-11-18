@@ -25,7 +25,7 @@
 2026-11-14 18:09:54,947 | INFO |   HO ridge_full       n= 210 rmse=0.026764 r2=-0.0166 dm_p=0.6747 dir=0.4619
 2026-11-14 18:09:55,032 | INFO |   HO lstm_stationary  n= 210 rmse=0.026575 r2=-0.0023 dm_p=0.5283 dir=0.5286
 2026-11-14 18:09:55,037 | INFO | Variant V1 finished in 357.5 s
-2026-11-14 18:09:55,039 | INFO | Wrote /home/arshiaask/projects/Gold_Usd_Oil_IRR/results/eval_V1.json
+2026-11-14 18:09:55,039 | INFO | Wrote <REPO>/results/eval_V1.json
 2026-11-14 18:09:55,040 | INFO | ========================================================================
 2026-11-14 18:09:55,040 | INFO | Variant V2
 2026-11-14 18:09:55,047 | INFO | V2 prices: 1424 rows, 2021-06-14..2026-06-13, relabelled=503
@@ -54,7 +54,7 @@
 2026-11-14 18:20:07,057 | INFO |   HO lstm_stationary  n= 210 rmse=0.026543 r2=+0.0001 dm_p=0.4984 dir=0.5143
 2026-11-14 18:20:07,138 | INFO |   HO lstm_legacy      n= 210 rmse=0.026631 r2=-0.0065 dm_p=0.7153 dir=0.4762
 2026-11-14 18:20:07,163 | INFO | Variant V2 finished in 612.1 s
-2026-11-14 18:20:07,169 | INFO | Wrote /home/arshiaask/projects/Gold_Usd_Oil_IRR/results/eval_V2.json
+2026-11-14 18:20:07,169 | INFO | Wrote <REPO>/results/eval_V2.json
 2026-11-14 18:20:07,169 | INFO | ========================================================================
 2026-11-14 18:20:07,169 | INFO | Variant V3
 2026-11-14 18:20:07,174 | INFO | V3 prices: 1424 rows, 2021-06-14..2026-06-13, relabelled=0
@@ -80,8 +80,8 @@
 2026-11-14 18:24:40,988 | INFO |   HO ridge_full       n= 210 rmse=0.027296 r2=-0.0574 dm_p=0.8426 dir=0.4810
 2026-11-14 18:24:41,073 | INFO |   HO lstm_stationary  n= 210 rmse=0.026676 r2=-0.0099 dm_p=0.6357 dir=0.5476
 2026-11-14 18:24:41,092 | INFO | Variant V3 finished in 273.9 s
-2026-11-14 18:24:41,097 | INFO | Wrote /home/arshiaask/projects/Gold_Usd_Oil_IRR/results/eval_V3.json
-2026-11-14 18:24:41,128 | INFO | Wrote /home/arshiaask/projects/Gold_Usd_Oil_IRR/results/eval_summary.csv (32 rows)
+2026-11-14 18:24:41,097 | INFO | Wrote <REPO>/results/eval_V3.json
+2026-11-14 18:24:41,128 | INFO | Wrote <REPO>/results/eval_summary.csv (32 rows)
 2026-11-14 18:24:41,192 | INFO | Artifact: training on 2021-08-28..2024-12-31 (fit=951, val=173), holdout starts 2025-10-01
-2026-11-14 18:24:57,094 | INFO | Artifact saved: /home/arshiaask/projects/Gold_Usd_Oil_IRR/models/gold_lstm_stationary_v2.keras + scalers + /home/arshiaask/projects/Gold_Usd_Oil_IRR/models/gold_lstm_stationary_v2.metadata.json
+2026-11-14 18:24:57,094 | INFO | Artifact saved: <REPO>/models/gold_lstm_stationary_v2.keras + scalers + <REPO>/models/gold_lstm_stationary_v2.metadata.json
 2026-11-14 18:24:57,094 | INFO | Stage 3 evaluation complete in 1259.6 s
