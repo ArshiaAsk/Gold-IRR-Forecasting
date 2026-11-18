@@ -11,7 +11,7 @@ from pathlib import Path
 # Import custom modules
 from config.settings import Config
 try:
-    # Package imports (used by src.mlops.*)
+    # Package imports (used when running from the project root)
     from src.data_preprocessor import DataPreprocessor
     from src.model_builder import LSTMModelBuilder, ModelTrainer
     from src.model_evaluator import ModelEvaluator, Visualizer

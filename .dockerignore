@@ -1,11 +1,39 @@
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.git/
-.gitignore
+.git
+.github
+.venv
+venv
+# Bytecode. Docker's patterns are anchored, so a bare "*.pyc" never reaches
+# src/api/*.pyc; the **/ forms do. These .pyc files embed absolute host paths.
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.pytest_cache
+.coverage
+.mypy_cache
+.ruff_cache
+
+# Data: the full series is not redistributed; the 200-row sample is copied explicitly.
+data/raw
+data/processed
+data/mlflow.db
+data/mlops_audit.db
+*.parquet
+
+# Local-only artifacts and material not needed at runtime.
+# results/predictions holds opt-in per-row CSVs that carry hold-out labels; the
+# image ships the aggregate JSON only.
+logs
+results/predictions
+mlruns
+mlflow
+mlflow.db
+outputs
+notebooks
+tests
+docs
+.env
+*.log
 *.png
 *.jpg
+*.svg
+.DS_Store

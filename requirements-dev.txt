@@ -1,0 +1,25 @@
+# Development dependencies: tests, training/evaluation, data fetching and plots.
+# Install this file (not requirements.txt) for a full working checkout:
+#     python -m pip install -r requirements-dev.txt
+#
+# Serving needs only requirements.txt. Python 3.12.
+
+-r requirements.txt
+
+# Tests
+pytest
+httpx==0.25.1
+
+# Data fetching (imported lazily by src/data_loader.py)
+yfinance
+curl_cffi
+
+# Training / evaluation plots (src/model_evaluator.py)
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Optional: only the notebooks import these. Nothing in src/ does.
+# statsmodels
+# catboost
+# lightgbm
+# xgboost

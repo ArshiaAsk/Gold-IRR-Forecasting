@@ -22,6 +22,7 @@ wheels/
 
 # Virtual environments
 venv/
+.venv/
 ENV/
 env/
 .env
@@ -33,53 +34,55 @@ env/
 *.swo
 *~
 
-# ML artifacts
+# ML artifacts (scalers are regenerated in Stage 3 and committed with the model)
 *.pkl
 *.joblib
 *.h5
-*.onnx
-mlruns/
+# Stage 3 primary artifact: model and its two scalers are committed together
+!models/scaler_X_stationary_v2.pkl
+!models/scaler_y_stationary_v2.pkl
 
-# Data
-data/*.db
-data/*.sqlite
-*.csv
+# Local databases
+*.db
+*.sqlite
+
+# Data: not redistributed (decision D14). The small sample is the exception.
+data/raw/
+data/processed/
+!data/sample/
+!data/sample/*.csv
 *.parquet
-mlflow.db
 
 # Logs
 logs/
 *.log
+# Stage 3 and Stage 4 run logs are committed result artifacts
+!results/run.log
+!results/backtest.log
 
-# Docker
-.dockerignore
+# Opt-in per-row predictions (--save-predictions); not committed, because they
+# carry hold-out labels and are reproducible, not a deliverable artifact.
+results/predictions/
+
+# Generated outputs and caches
+outputs/
+catboost_info/
+.cache/
+.pytest_cache/
+.coverage
+
+# Plots
+*.png
+*.jpg
+*.jpeg
+*.svg
 
 # OS
 .DS_Store
 Thumbs.db
 
-# MLflow
-mlflow/
-
 # Temporary files
 *.tmp
-.cache/
 
-# HTML coverage reports
-.coverage
-
-# Docs
-docs/*
-
-# Jupyter notebooks
+# Jupyter
 .ipynb_checkpoints/
-
-# pytest
-.pytest_cache/
-
-# Plots / Output
-outputs/
-*.png
-*.jpg
-*.jpeg
-*.svg

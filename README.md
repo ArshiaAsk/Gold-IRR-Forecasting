@@ -1,858 +1,433 @@
-# Gold Price Prediction System - Complete Documentation
+# Forecasting Iranian Gold (IRR): an end-to-end pipeline and an honest negative result
 
-## 📊 Project Overview
+This repository builds a complete, reproducible pipeline for one narrow question: can a
+recurrent model predict the **next trading day's log return** of 18-karat gold priced in
+Iranian rial? It covers data acquisition and repair, a frozen stationary feature set, an LSTM,
+a pre-registered walk-forward and hold-out evaluation, an economic long/flat check, a FastAPI
+service and a Streamlit demo. The answer is **no**: the model has no demonstrated predictive
+edge, and a rule driven by its predictions adds no value over buy-and-hold gold after costs.
+The nominal gains that make the chart look impressive are mostly rial devaluation, not
+forecasting skill. The pipeline is the deliverable; the negative result is the finding.
 
-A professional LSTM-based deep learning system for predicting Iranian gold prices using time-series analysis with technical indicators and market correlations. The system includes a complete training pipeline and a production-ready REST API for real-time predictions.
+## Headline results
 
-**Current Status:** ✅ Phase 1 Complete | ✅ Phase 2 Complete | ✅ Phase 3 Complete | 🚀 Phase 4 MLOps Ready
+All numbers below are read from `results/eval_V2.json` and `results/backtest.json`. The
+evaluation protocol was committed before any model was fit (`docs/EVAL_PROTOCOL.md`); the
+economic protocol was committed before any backtest result (`docs/BACKTEST_PROTOCOL.md`).
 
-## ✅ Phase 4 MLOps (Completed)
+### Predictive accuracy, V2, log returns
 
-Implemented runtime MLOps orchestration includes:
-- FastAPI MLOps endpoints: `/metrics`, `/mlops/health`, `/mlops/model-registry`
-- Background scheduler worker for weekly retraining and daily drift checks
-- Filesystem model registry with rollback support
-- Prometheus metrics for latency, drift, API errors, and model quality
-- Multi-service Docker stack (`api`, `mlops-worker`, `prometheus`, `grafana`)
-- Centralized rotating logging and operator docs
-- API key auth (`X-API-Key`) + in-memory rate limiting for production endpoints
-- SQLite audit persistence for predictions, training runs, and API events
-- Extended health checks: disk, memory, model freshness, audit DB connectivity
-- Alert channel hooks for Slack / Telegram / SMTP email
+Walk-forward pools five expanding folds (n = <!-- num:int@eval_V2.walkforward.lstm_stationary.n -->552<!-- /num -->);
+the hold-out is <!-- num:int@eval_V2.holdout.lstm_stationary.n -->210<!-- /num --> rows from
+2025-10-01 to 2026-06-11. R² is measured against a zero-return benchmark; the DM p-value is
+one-sided against persistence (lower is better for the model).
 
-### Run Full MLOps Stack
+| Model | WF RMSE | WF R² | WF DM p | HO RMSE | HO R² | HO DM p |
+|---|---:|---:|---:|---:|---:|---:|
+| Persistence (zero return) | <!-- num:eval_V2.walkforward.persistence.rmse -->0.018350<!-- /num --> | 0.0000 | — | <!-- num:eval_V2.holdout.persistence.rmse -->0.026545<!-- /num --> | 0.0000 | — |
+| Historical mean | <!-- num:eval_V2.walkforward.histmean.rmse -->0.018188<!-- /num --> | <!-- num:eval_V2.walkforward.histmean.r2_zero -->0.0175<!-- /num --> | <!-- num:eval_V2.walkforward.histmean.dm_p_one_sided -->0.0055<!-- /num --> | <!-- num:eval_V2.holdout.histmean.rmse -->0.026457<!-- /num --> | <!-- num:eval_V2.holdout.histmean.r2_zero -->0.0066<!-- /num --> | <!-- num:eval_V2.holdout.histmean.dm_p_one_sided -->0.2428<!-- /num --> |
+| Ridge, own lags | <!-- num:eval_V2.walkforward.ridge_own.rmse -->0.018299<!-- /num --> | <!-- num:eval_V2.walkforward.ridge_own.r2_zero -->0.0056<!-- /num --> | <!-- num:eval_V2.walkforward.ridge_own.dm_p_one_sided -->0.3264<!-- /num --> | <!-- num:eval_V2.holdout.ridge_own.rmse -->0.026704<!-- /num --> | <!-- num:eval_V2.holdout.ridge_own.r2_zero -->-0.0120<!-- /num --> | <!-- num:eval_V2.holdout.ridge_own.dm_p_one_sided -->0.7966<!-- /num --> |
+| Ridge, all 23 features | <!-- num:eval_V2.walkforward.ridge_full.rmse -->0.018846<!-- /num --> | <!-- num:eval_V2.walkforward.ridge_full.r2_zero -->-0.0548<!-- /num --> | <!-- num:eval_V2.walkforward.ridge_full.dm_p_one_sided -->0.8595<!-- /num --> | <!-- num:eval_V2.holdout.ridge_full.rmse -->0.026798<!-- /num --> | <!-- num:eval_V2.holdout.ridge_full.r2_zero -->-0.0192<!-- /num --> | <!-- num:eval_V2.holdout.ridge_full.dm_p_one_sided -->0.7018<!-- /num --> |
+| **Stationary LSTM** | <!-- num:eval_V2.walkforward.lstm_stationary.rmse -->0.018214<!-- /num --> | <!-- num:eval_V2.walkforward.lstm_stationary.r2_zero -->0.0148<!-- /num --> | <!-- num:eval_V2.walkforward.lstm_stationary.dm_p_one_sided -->0.2251<!-- /num --> | <!-- num:eval_V2.holdout.lstm_stationary.rmse -->0.026543<!-- /num --> | <!-- num:eval_V2.holdout.lstm_stationary.r2_zero -->0.0001<!-- /num --> | <!-- num:eval_V2.holdout.lstm_stationary.dm_p_one_sided -->0.4984<!-- /num --> |
+
+The LSTM's walk-forward R² of <!-- num:eval_V2.walkforward.lstm_stationary.r2_zero -->0.0148<!-- /num -->
+has a block-bootstrap 95% interval of
+[<!-- num:eval_V2.walkforward.lstm_stationary.boot_r2_lo -->-0.0272<!-- /num -->,
+<!-- num:eval_V2.walkforward.lstm_stationary.boot_r2_hi -->0.0561<!-- /num -->]; on the hold-out it is
+[<!-- num:eval_V2.holdout.lstm_stationary.boot_r2_lo -->-0.0577<!-- /num -->,
+<!-- num:eval_V2.holdout.lstm_stationary.boot_r2_hi -->0.0630<!-- /num -->]. Both include zero.
+
+Directional accuracy tells the same story. Walk-forward the LSTM is right
+<!-- num:pct@eval_V2.walkforward.lstm_stationary.dir_acc -->56.16%<!-- /num --> of the time, while
+always predicting "up" is right <!-- num:pct@eval_V2.walkforward.lstm_stationary.always_up_acc -->56.34%<!-- /num -->.
+On the hold-out both are <!-- num:pct@eval_V2.holdout.lstm_stationary.dir_acc -->51.43%<!-- /num -->:
+the model has no directional skill at all.
+
+### Economic reality, hold-out, after costs
+
+A long/flat rule driven by the served seed-42 artifact, 210 trading days, no shorting
+anywhere. S0 is buy-and-hold gold in rial; S1 is buy-and-hold USD in rial (the devaluation
+reference); S2 is long when the prediction exceeds the training mean; S3 is long when the
+prediction is positive.
+
+| Strategy | 0% per side | 0.75% per side |
+|---|---:|---:|
+| S0 buy-and-hold gold (IRR) | <!-- num:pct@backtest.strategies.C0.S0.total_return -->+57.89%<!-- /num --> | <!-- num:pct@backtest.strategies.C2.S0.total_return -->+56.71%<!-- /num --> |
+| S1 buy-and-hold USD (IRR) | <!-- num:pct@backtest.strategies.C0.S1.total_return -->+49.00%<!-- /num --> | <!-- num:pct@backtest.strategies.C2.S1.total_return -->+47.89%<!-- /num --> |
+| S2 long if prediction > training mean | <!-- num:pct@backtest.strategies.C0.S2.total_return -->+12.37%<!-- /num --> | <!-- num:pct@backtest.strategies.C2.S2.total_return -->+1.13%<!-- /num --> |
+| S3 long if prediction > 0 | <!-- num:pct@backtest.strategies.C0.S3.total_return -->+52.12%<!-- /num --> | <!-- num:pct@backtest.strategies.C2.S3.total_return -->+36.90%<!-- /num --> |
+
+At the pre-registered decision cost of 0.75% per side, S2 loses
+<!-- num:bp@backtest.bootstrap.C2.S2_vs_S0.mean_diff -->-22.45<!-- /num --> bp/day against buy-and-hold,
+95% CI [<!-- num:bp@backtest.bootstrap.C2.S2_vs_S0.ci_low -->-45.45<!-- /num -->,
+<!-- num:bp@backtest.bootstrap.C2.S2_vs_S0.ci_high -->-7.89<!-- /num -->] — significantly worse.
+Even at zero cost S2 is worse: <!-- num:bp@backtest.bootstrap.C0.S2_vs_S0.mean_diff -->-17.83<!-- /num --> bp/day,
+CI [<!-- num:bp@backtest.bootstrap.C0.S2_vs_S0.ci_low -->-40.54<!-- /num -->,
+<!-- num:bp@backtest.bootstrap.C0.S2_vs_S0.ci_high -->-3.08<!-- /num -->]. S3 is indistinguishable
+from buy-and-hold at 0.75% per side:
+<!-- num:bp@backtest.bootstrap.C2.S3_vs_S0.mean_diff -->-7.56<!-- /num --> bp/day,
+CI [<!-- num:bp@backtest.bootstrap.C2.S3_vs_S0.ci_low -->-23.96<!-- /num -->,
+<!-- num:bp@backtest.bootstrap.C2.S3_vs_S0.ci_high -->2.01<!-- /num -->], and it does not beat it.
+
+Over the same period gold in USD returned
+<!-- num:pct@backtest.gold_in_usd.total_return -->+5.97%<!-- /num --> while gold in rial returned
++57.89% and USD/IRR rose +49.00%. Most of the rial gain is the rial, not the metal.
+
+## How to read the results
+
+**The benchmark is zero return.** A log return is close to unpredictable, so "predict zero"
+is a strong baseline. `r2_zero` compares the model's squared error with that baseline;
+persistence therefore scores exactly 0. A positive R² means only that the model is slightly
+better than assuming no change — not that it is useful.
+
+**Walk-forward** fits on an expanding window and tests on the next block, five times, with a
+30-row purge and a 5-row embargo between fit and test. Scalers are fit only on each fold's
+fitting rows. The pooled out-of-sample set is 552 rows. This is the closest thing to an
+honest simulation of repeated deployment.
+
+**The hold-out** is the final 210 rows (2025-10-01 to 2026-06-11), never used for fitting or
+model selection. It is scored once in the protocol. In practice it was predicted six times
+across the project (see Limitations); three of those passes were scored, and none was re-run
+after seeing its result.
+
+**Diebold–Mariano** tests whether the model's squared-error loss is lower than persistence's,
+with a HAC variance and the Harvey–Leybourne–Newbold small-sample correction. A p-value above
+0.05 means the difference is not distinguishable from noise.
+
+**The bootstrap** resamples blocks of the loss differential and reports a 95% interval for R².
+An interval that contains zero is the formal version of "no demonstrated edge".
+
+**Why the historical mean looked significant in walk-forward and not on the hold-out.** The
+historical mean predicts a constant positive return. In the walk-forward period the up-rate
+was 56.3%, so a positive constant reduces squared error and the DM test is significant
+(p = 0.0055). On the hold-out the up-rate fell to 51.4%, the volatility rose, and the same
+constant has no significant advantage (p = 0.2428). That is nominal drift, not skill: the
+benchmark was flattered by the direction the series happened to move, and the effect did not
+survive a different sample.
+
+**Break-even costs.** At a 1.5% round trip, a daily directional rule would need
+<!-- num:pct@eval_V2.cost_sanity.walkforward.breakeven_acc_0_015 -->108.9%<!-- /num --> accuracy
+in walk-forward and <!-- num:pct@eval_V2.cost_sanity.holdout.breakeven_acc_0_015 -->95.4%<!-- /num -->
+on the hold-out just to break even. At a 3% round trip it needs
+<!-- num:pct@eval_V2.cost_sanity.walkforward.breakeven_acc_0_030 -->167.8%<!-- /num --> and
+<!-- num:pct@eval_V2.cost_sanity.holdout.breakeven_acc_0_030 -->140.9%<!-- /num -->. Observed
+accuracy is 51–57%. Costs are larger than any effect the model could plausibly have.
+
+## What is in the repository
+
+```
+src/            data loader, features, evaluation, backtest, API, model code
+config/         settings (paths, tickers, the date-repair window) and logging
+models/         seed-42 stationary LSTM + two scalers + metadata
+results/        committed evaluation and backtest JSON/CSV plus run logs
+data/sample/    the last 200 rows, the only data redistributed
+docs/           audit, protocols, results, decisions, serving design, this stage's plan
+scripts/        data fetch and the README-numbers check
+tests/          the full test suite (pytest)
+notebooks/exploratory/  early sketches; outputs cleared, not the final evaluation
+```
+
+Python **3.12**. The runtime needs only `requirements.txt`; development, training and data
+fetching need `requirements-dev.txt`. The Docker image is the only deployment artifact; no
+live demo is provided.
+
+### Quickstart
 
 ```bash
-docker-compose up --build -d
+python -m venv .venv && . .venv/bin/activate
+make install       # runtime + development requirements into .venv
+make test          # full suite: 91 collected (88 pass + 3 skip without the full series)
+make check         # the test suite, then the README-numbers check
+make api           # FastAPI on :8000 (sets API_KEY=demo-key)
+make app           # Streamlit on :8501
+make docker-build  # single image, API + Streamlit
+make docker-run    # API on :8000
 ```
 
-### Verify
+`make check` is exactly what CI runs: `pytest`, then `scripts/check_readme_numbers.py`, which
+re-reads every number marked in this file from `results/*.json` and fails on drift.
+
+`make test` collects 91 tests. In a clean clone, 88 pass and 3 skip because they need the
+untracked full series (`data/raw/final_gold_dataset.csv`); with that file present, all 91 pass.
+The 3 skips are the full-series feature-parity check, the EMA warm-up check and the block-date
+rejection check.
+
+`make evaluate` re-runs the pre-registered Stage 3 protocol. It retrains 109 LSTMs and took
+1,259.6 s (21.0 min) on the reference machine; it needs the full local dataset, which is not
+in the repository. `make backtest` re-runs the inference-only economic check.
+
+`make fetch-data` calls the TGJU and Yahoo scrapers and writes `data/raw/final_gold_dataset.csv`.
+It needs `yfinance` and `curl_cffi` (installed by `requirements-dev.txt`), may break if TGJU
+changes its endpoint, and writes to a gitignored directory.
+
+### Docker
+
+The image is the only deployment artifact: one Python 3.12 slim image, non-root UID 10001,
+`HEALTHCHECK` on `/health`, API on 8000 by default and Streamlit from the same image by
+overriding the command.
 
 ```bash
-curl http://localhost:8000/health
-curl -H "X-API-Key: $API_KEY" http://localhost:8000/mlops/health
-curl http://localhost:8000/metrics
-curl http://localhost:8001/metrics
+docker build -t gold-irr-honest-forecasting .
+docker run --rm -p 8000:8000 -e API_KEY=demo-key gold-irr-honest-forecasting
+docker run --rm -p 8501:8501 gold-irr-honest-forecasting \
+  streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
 ```
 
-### Phase 4 Runtime Flow (End-to-End)
+Measured on the reference machine: the image is **2.99 GB** on disk, of which the single
+`pip install` layer is 2,240 MB — almost all of it TensorFlow. The build took **4,224.9 s
+(70.4 min)** because the connection to `files.pythonhosted.org` dropped the 259 MB
+`tensorflow-cpu` wheel; the Dockerfile retries and resumes, so a fast connection should be
+much quicker. A Stage 6 rebuild that changed only application files reused the cached
+dependency layer and took **1 s**; the image ID changed and the size stayed **2.99 GB** on
+disk (`docker image inspect` reports 603,727,316 bytes). The running container reports
+`healthy` and returns `-0.00045206130016595125` for the bundled sample as shipped,
+bit-identical to the value from a local run. That identity is a property of this sample file,
+not of any refreshed series: replacing only the sample's `Ounce_USD` column with the complete
+global series changes the prediction to `-0.0004350765375420451` (difference +1.70e-05),
+because the sample carries a June-2026 ounce vintage (see `data/sample/README.md`).
 
-1. API starts and loads model artifacts, MLOps integration, scheduler thread, and audit DB.
-2. Requests to `/predict*` and `/mlops/*` pass API-key auth + rate limiting.
-3. Prediction latency, API errors, uptime ratio, and drift events are exported to Prometheus.
-4. Every day drift checks run; every week retraining runs through validation gates.
-5. If validation + promotion gates pass, model registry promotes a new production version.
-6. Every prediction and retraining run is persisted to SQLite audit tables.
-7. If failures happen, alerting emits logs and optional Slack/Telegram/SMTP notifications.
-8. Operators monitor Grafana dashboards and can rollback via model registry metadata.
+The image contains the model, scalers, metadata, `results/` JSON and the 200-row sample. It
+does not contain `data/raw`, `data/processed`, tests, notebooks or `.env`.
 
+### API
 
----
+Three endpoints. The caller sends recent **raw daily rows**; the service runs the same feature
+function training used. Prices are in **Rial**; `Gold_IRR` is 18-karat gold per gram
+(`geram18`), `USD_IRR` is rial per dollar, `Ounce_USD` is dollars per ounce, `Oil_USD` is Brent
+in dollars. Set `API_KEY` in the environment; `/health` is open and the other two fail closed
+with 503 when the key is unset. There is no rate limiter, deliberately.
 
-## 🎯 Project Goals
+The accepted field names are the sample CSV header verbatim:
 
-- **Primary Objective:** Build a robust gold price prediction model for the Iranian market
-- **Current Achievement:** Deployed REST API with real-time prediction capabilities
-- **Next Goal:** Implement an AI Bot Trader for automated gold trading decisions
-- **Model Type:** LSTM (Long Short-Term Memory) Neural Network
-- **Prediction:** Next-day gold price based on 30-day historical sequences
+| Field | Accepted JSON names | Unit |
+|---|---|---|
+| date | `date`, `Date` | Gregorian date, `YYYY-MM-DD` |
+| Gold_IRR | `Gold_IRR` | Rial per gram, 18k |
+| USD_IRR | `USD_IRR` | Rial per USD |
+| Ounce_USD | `Ounce_USD` | USD per ounce |
+| Oil_USD | `Oil_USD` | USD per barrel |
 
----
+`date` and `Date` are the same field (`pydantic.AliasChoices`); both spellings are accepted,
+so a row parsed from `data/sample/gold_sample.csv` can be posted without renaming. Supplying
+both with different values is a 422.
 
-## 📊 Dataset Information
+`GET /health`:
 
-**File:** `advanced_gold_features.csv`
-
-**Records:** 1,385 daily observations
-
-**Features:** 15 engineered features
-
-### Feature Categories
-
-#### 1. Price Log Returns (4 features)
-- `Gold_LogRet`: Iranian gold daily log return
-- `USD_LogRet`: USD/IRR exchange rate log return
-- `Ounce_LogRet`: Gold ounce price log return
-- `Oil_LogRet`: Crude oil price log return
-
-#### 2. Technical Indicators (6 features)
-- `SMA_7`: 7-day Simple Moving Average
-- `RSI_14`: 14-day Relative Strength Index
-- `MACD`: Moving Average Convergence Divergence
-- `MACD_Signal`: MACD signal line
-- `Bollinger_Upper`: Upper Bollinger Band
-- `Bollinger_Lower`: Lower Bollinger Band
-
-#### 3. Lagged Features (5 features)
-- `Gold_LogRet_Lag_1`, `Gold_LogRet_Lag_2`, `Gold_LogRet_Lag_3`
-- `USD_LogRet_Lag_1`, `USD_LogRet_Lag_2`
-
-**Target Variable:** `Target_Next_LogRet` (next day log return)
-
-**Price Range:** ~10.7M - 11.6M Toman (historical data from 2021-01-27 onwards)
-
----
-
-## 🏗️ Model Architecture
-
-### LSTM Configuration
-
-Input Shape: (30, 15)
-├── LSTM Layer 1: 128 units, return_sequences=True
-├── Dropout: 0.3
-├── LSTM Layer 2: 64 units
-├── Dropout: 0.3
-├── Dense Layer: 32 units, ReLU activation
-└── Output Layer: 1 unit (log return prediction)
-
-Total Parameters: 33,441
-Optimizer: Adam (lr=0.0005)
-Loss Function: Mean Squared Error (MSE)
-
-
-### Key Hyperparameters
-
-- **Sequence Length:** 30 days
-- **Batch Size:** 32
-- **Epochs:** 150 (with early stopping)
-- **Learning Rate:** 0.0005
-- **Validation Split:** 15%
-- **Test Split:** 15%
-
----
-
-## 📈 Phase 1: Training Results (COMPLETE ✅)
-
-### Dataset Split
-
-| Split | Samples | Percentage |
-|-------|---------|------------|
-| Train | 940 | 70% |
-| Validation | 177 | 15% |
-| Test | 177 | 15% |
-
-### Training Performance
-
-Training Duration: 20 seconds
-Epochs Completed: 17/150 (Early Stopping)
-Final Train Loss: 0.8946
-Final Validation Loss: 1.1533
-
-
-### Test Set Metrics
-
-#### Price-Level Metrics
-- **RMSE:** 1,715,089.31 Toman
-- **MAE:** 1,126,082.03 Toman
-- **R² Score:** 0.9938 (99.38% variance explained) ✨
-- **MAPE:** 1.42%
-
-#### Log-Return Metrics
-- **RMSE:** 0.0340
-- **MAE:** 0.0235
-- **R² Score:** 0.0824
-
-### Key Insights
-
-✅ **Excellent Price Prediction:** R² = 0.9938 indicates the model captures price movements very well
-
-✅ **Low Error Rate:** MAPE of 1.42% means average predictions are within ±1.42% of actual prices
-
-✅ **Production Ready:** Model stability and convergence achieved in 17 epochs
-
-⚠️ **Log-Return Challenge:** Lower R² in log returns is expected (returns are inherently noisy)
-
----
-
-## 🚀 Phase 2: Prediction API (COMPLETE ✅)
-
-### API Features
-
-✅ **RESTful Endpoints** - Clean, well-documented API design
-
-✅ **Health Monitoring** - System status and model availability checks
-
-✅ **Real-time Predictions** - Single-shot and confidence interval predictions
-
-✅ **Automatic Feature Engineering** - Build features from historical data
-
-✅ **Production-Ready** - Docker containerization and CORS support
-
-### API Endpoints
-
-#### 1. Root Endpoint
-```http
-GET /
-```
-Returns API information and available endpoints.
-
-#### 2. Health Check
-```http
-GET /health
-```
-**Response:**
 ```json
-{
-  "status": "healthy",
-  "model_loaded": true,
-  "timestamp": "2026-01-04T14:18:41.646224"
-}
+{"status":true,"model_loaded":true,"timestamp":"2026-11-18T11:25:58.972087"}
 ```
 
-#### 3. Model Information
-```http
-GET /model-info
-```
-**Response:**
-```json
-{
-  "model_path": ".../models/gold_lstm_v2.keras",
-  "input_shape": "(None, 30, 15)",
-  "output_shape": "(None, 1)",
-  "total_parameters": 33441,
-  "expected_features": {
-    "sequence_length": 30,
-    "n_features": 15,
-    "features_name": [...]
-  }
-}
-```
+`GET /model-info` (trimmed) returns the artifact metadata, the input contract and the committed
+metrics. The contract is `min_rows: 89`, `max_rows: 5000`, `sequence_length: 30`,
+`n_features: 23`, target `next_trading_day_log_return`.
 
-#### 4. Make Prediction
-```http
-POST /predict
-```
-**Request Body:**
-```json
-{
-  "features": [0.001, 0.002, ...],  // 450 values (30 days × 15 features)
-  "current_price": 144000000.0
-}
-```
+`POST /predict` with the 200-row sample, posted exactly as the CSV parses it:
 
-**Response:**
-```json
-{
-  "current_price": 144000000.0,
-  "predicted_price": 144411020.22,
-  "price_change": 411020.22,
-  "price_change_percent": 0.29,
-  "predicted_log_return": 0.00285,
-  "prediction_timestamp": "2026-01-04T14:18:41.880385"
-}
-```
-
-#### 5. Prediction with Confidence Intervals
-```http
-POST /predict-with-confidence?n_simulations=100
-```
-**Response:**
-```json
-{
-  "predicted_price": 144419047,
-  "confidence_interval_95": {
-    "lower": 142903583,
-    "upper": 145952433
-  },
-  "simulations": 100,
-  ...
-}
-```
-
-#### 6. Predict from Historical Data
-```http
-POST /predict-from-history
-```
-**Request Body:**
-```json
-{
-  "historical_prices": [95000000, ...],    // 30 days
-  "usd_rates": [250000, ...],              // 30 days
-  "ounce_prices": [1800, ...],             // 30 days
-  "oil_prices": [70, ...],                 // 30 days
-  "current_price": 144000000.0
-}
-```
-
-### API Performance (Live Test Results)
-
-**Test Configuration:**
-- Current Price: 144,000,000 Toman
-- Model Version: gold_lstm_v2
-- Timestamp: 2026-01-04
-
-**Prediction Results:**
-📊 Predicted Price: 144,419,047 Toman
-📊 Price Change: +419,047 Toman (+0.29%)
-📊 95% Confidence Interval: [142,903,583 - 145,952,433]
-📊 Prediction Std Dev: 769,126 Toman
-
-
-### Running the API
-
-#### Method 1: Direct Python
 ```bash
-# Install dependencies
-pip install -r requirements-api.txt
+.venv/bin/python - <<'PY'
+import json, urllib.request
+import pandas as pd
 
-# Start the server
-uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
-
-# Access interactive docs
-open http://localhost:8000/docs
-```
-
-#### Method 2: Docker
-```bash
-# Build and run with docker-compose
-docker-compose up --build
-
-# Or build manually
-docker build -t gold-price-api .
-docker run -p 8000:8000 gold-price-api
-```
-
-### API Client Example
-
-```python
-import requests
-
-# API base URL
-BASE_URL = "http://localhost:8000"
-
-# 1. Check health
-response = requests.get(f"{BASE_URL}/health")
-print(response.json())
-
-# 2. Get model info
-response = requests.get(f"{BASE_URL}/model-info")
-print(response.json())
-
-# 3. Make prediction
-data = {
-    "features": [0.001] * 450,  # 30 × 15 features
-    "current_price": 144000000.0
-}
-response = requests.post(f"{BASE_URL}/predict", json=data)
-print(response.json())
-
-# 4. Prediction with confidence
-response = requests.post(
-    f"{BASE_URL}/predict-with-confidence?n_simulations=100",
-    json=data
+rows = json.loads(pd.read_csv("data/sample/gold_sample.csv").to_json(orient="records"))
+request = urllib.request.Request(
+    "http://localhost:8000/predict",
+    data=json.dumps({"rows": rows}).encode(),
+    headers={"Content-Type": "application/json", "X-API-Key": "demo-key"},
 )
-result = response.json()
-print(f"Price: {result['predicted_price']:,.0f} Toman")
-print(f"95% CI: [{result['confidence_interval_95']['lower']:,.0f}, "
-      f"{result['confidence_interval_95']['upper']:,.0f}]")
+with urllib.request.urlopen(request) as response:
+    print(json.dumps(json.load(response), indent=2))
+PY
 ```
 
----
-
-## 🔧 Configuration System
-
-### Structured Dataclasses
-
-```python
-@dataclass
-class PathConfig:
-    BASE_DIR: Path
-    DATA_DIR: Path
-    MODELS_DIR: Path
-    RESULTS_DIR: Path
-    LOGS_DIR: Path
-
-@dataclass
-class DataConfig:
-    SEQUENCE_LENGTH: int = 30
-    VAL_SPLIT_RATIO: float = 0.15
-    TEST_SPLIT_RATIO: float = 0.15
-    FEATURE_COLUMNS: List[str] = field(default_factory=list)
-    TARGET_COLUMN: str = 'Target_Next_LogRet'
-
-@dataclass
-class ModelConfig:
-    LSTM_UNITS_1: int = 128
-    LSTM_UNITS_2: int = 64
-    DROPOUT_RATE: float = 0.3
-    DENSE_UNITS: int = 32
-    LEARNING_RATE: float = 0.0005
-    EPOCHS: int = 150
-    BATCH_SIZE: int = 32
-
-@dataclass
-class TradingConfig:
-    INITIAL_CAPITAL: float = 100_000_000
-    POSITION_SIZE: float = 0.1
-    STOP_LOSS: float = 0.02
-    TAKE_PROFIT: float = 0.03
-```
-
----
-
-## 🚀 Quick Start Guide
-
-### 1. Installation
-
-```bash
-# Clone repository
-git clone <repository-url>
-cd gold-price-prediction
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-pip install -r requirements-api.txt  # For API
-```
-
-### 2. Train the Model (Phase 1)
-
-```python
-from src.pipeline.train_pipeline import TrainingPipeline
-from src.config.config_settings import Config
-
-# Initialize configuration
-config = Config()
-
-# Run complete pipeline
-pipeline = TrainingPipeline(config)
-results = pipeline.run()
-
-print(f"✅ Training Complete!")
-print(f"Test RMSE: {results['test_metrics']['price_rmse']:,.2f} Toman")
-print(f"Test R²: {results['test_metrics']['price_r2']:.4f}")
-```
-
-### 3. Start the API (Phase 2)
-
-```bash
-# Start FastAPI server
-uvicorn src.api.main:app --reload --port 8000
-
-# View interactive documentation
-open http://localhost:8000/docs
-
-# Test with example client
-python src/api/client_example.py
-```
-
----
-
-## 📦 Dependencies
-
-### Core Training Dependencies (`requirements.txt`)
-
-tensorflow >= 2.15.0
-keras >= 3.0.0
-numpy >= 1.24.0
-pandas >= 2.0.0
-scikit-learn >= 1.3.0
-matplotlib >= 3.7.0
-seaborn >= 0.12.0
-joblib >= 1.3.0
-
-
-### API Dependencies (`requirements-api.txt`)
-
-fastapi >= 0.109.0
-uvicorn[standard] >= 0.27.0
-pydantic >= 2.5.0
-python-multipart >= 0.0.6
-
-
-## 📊 Sample Predictions
-
-### Example API Output
-
-
-Current Market State
-===============================================================================
-Current Gold Price: 144,000,000 Toman
-USD/IRR Rate: 250,000
-Gold Ounce (USD): $1,850
-Crude Oil (USD): $70
-
-
-
-Model Prediction
-================================================================================
-Predicted Price: 144,419,047 Toman
-Price Change: +419,047 Toman (+0.29%)
-Predicted Log Return: 0.00285
-
-
-Confidence Analysis
-================================================================================
-95% Confidence Interval: [142,903,583 - 145,952,433]
-Price Range (±): 1,515,464 Toman
-Standard Deviation: 769,126 Toman
-Simulations: 100
-
-
-Trading Signal (Example)
-================================================================================
-Signal: BUY (Weak)
-Confidence: 65%
-Recommended Position Size: 5% of capital
-Stop Loss: 143,100,000 Toman (-0.62%)
-Take Profit: 145,500,000 Toman (+1.04%)
-
-
----
-
-## 🔍 Model Evaluation Details
-
-### Price Reconstruction Method
-
-The model predicts **log returns**, then reconstructs prices:
-
-$$\text{Price}_{t+1} = \text{Price}_t \times e^{\text{LogReturn}_{predicted}}$$
-
-This approach:
-- ✅ Normalizes price movements
-- ✅ Handles multiplicative trends
-- ✅ Reduces prediction variance
-- ✅ Maintains mathematical consistency
-
-### Visualization Outputs
-
-1. **Training History:** Loss curves (train vs validation)
-2. **Predictions vs Actual:** Time-series comparison
-3. **Residuals Analysis:** Error distribution and patterns
-4. **Confidence Intervals:** Uncertainty quantification
-
----
-
-## 🐳 Docker Deployment
-
-### Build and Run
-
-```bash
-# Build image
-docker build -t gold-price-api .
-
-# Run container
-docker run -d -p 8000:8000 --name gold-api gold-price-api
-
-# View logs
-docker logs -f gold-api
-
-# Stop container
-docker stop gold-api
-```
-
-### Docker Compose
-
-```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-```
-
----
----
-
-## 🎯 Project Phases
-
-### ✅ Phase 1: Model Development (COMPLETE)
-- [x] Data preprocessing pipeline
-- [x] LSTM model architecture
-- [x] Training with callbacks (EarlyStopping, ReduceLROnPlateau)
-- [x] Evaluation metrics & visualization
-- [x] Model persistence (Keras format)
-- [x] Professional code structure
-
-**Status:** Production-ready model achieved with R² = 0.9938
-
----
-
-### ✅ Phase 2: Prediction API (COMPLETE)
-
-**Objective:** Build FastAPI service for real-time predictions
-
-**Delivered Components:**
-- [x] RESTful API endpoints (`/predict`, `/health`, `/model-info`)
-- [x] Request validation with Pydantic
-- [x] Model loading with lifespan context manager
-- [x] Confidence interval predictions (Monte Carlo)
-- [x] Docker containerization
-- [x] Interactive API documentation (Swagger/ReDoc)
-- [x] Client example code
-
-**Live API Metrics:**
-- Model Parameters: 33,441
-- Input Shape: (30, 15)
-- Prediction Accuracy: ±769K Toman (95% CI)
-- Response Time: <100ms
-
-**Status:** Production-ready API deployed and tested
-
----
-
- I'll first examine your uploaded files to understand the current state of your trading bot, then provide the requested section as markdown code.Now let me provide you with the requested sections formatted as markdown code blocks:
-
-## 📊 Phase 3: Backtesting System
-
-###  Strategy Configuration
-
-```python
-# Edit trading_bot/config/backtest_config.py:
-
-INITIAL_CAPITAL = 1_000_000_000  # 1B IRR
-BUY_THRESHOLD = 0.008            # 0.8% predicted return
-SELL_THRESHOLD = -0.005          # -0.5% predicted return
-POSITION_SIZE = 0.3              # 30% of capital
-STOP_LOSS = 0.05                 # 5% stop loss
-TAKE_PROFIT = 0.15               # 15% take profit
-```
-
-### Run Backtest
-
-```bash
-cd trading_bot
-python main_backtest.py
-```
-
-### Results Analysis
-
-**Output Files:**
-- `outputs/backtest_metrics.json` - Performance summary
-- `outputs/trade_log.csv` - All executed trades
-- `outputs/portfolio_log.csv` - Daily portfolio values
-- `outputs/plots/` - Visualization charts
-
-**Key Metrics:**
+Output, captured on 2026-11-18 against a local server (trimmed to the fields shown; the full
+response also carries the model metadata, four caveats and a timestamp):
 
 ```json
 {
-  "total_return": "45.23%",
-  "sharpe_ratio": 1.85,
-  "max_drawdown": "-12.4%",
-  "win_rate": "62.5%",
-  "total_trades": 156,
-  "profitable_trades": 97
+  "prediction": {
+    "target": "next_trading_day_log_return",
+    "log_return": -0.00045206130016595125,
+    "simple_return": -0.00045195913585182153,
+    "persistence_log_return": 0.0,
+    "implied_next_price_persistence_equivalent": 172130169.02113324
+  },
+  "input": {"last_date": "2026-06-13", "rows_used": 200, "feature_rows": 141,
+            "sequence_length": 30, "last_close_irr": 172208000.0},
+  "warnings": ["stale_input: last date 2026-06-13 is 158 days old (limit 7)"],
+  "statement": "This model has no demonstrated predictive edge: ..."
 }
 ```
 
-**Visualization:**
-- Portfolio value over time
-- Drawdown analysis
-- Monthly returns heatmap
-- Trade distribution
-- Win/loss timeline
+For the bundled sample as shipped, the `log_return` is bit-identical to the value in the
+Docker section and to the committed serving output. A refreshed global ounce series changes it
+to `-0.0004350765375420451` (difference +1.70e-05); see `data/sample/README.md`. The stale day
+count grows with the calendar.
 
----
+**Why 89 rows minimum.** The longest lookback is the 60-row SMA, which leaves the first feature
+row at index 59; the model needs 30 consecutive feature rows, so 59 + 30 = 89. An 88-row
+request yields 29 feature rows and is rejected.
 
-## 🤖 Phase 3.2: Live Trading Bot
+**Why 422 for 2023-10-27 .. 2025-08-06.** Those TGJU rows are dated one day early. The V2
+training data repairs them by pairing each relabelled Iranian row with the global bar of the
+corrected date, which requires the full global vintage. A raw-row request cannot supply that,
+so serving those dates would feed V1-style global features to a V2-trained model. The service
+rejects them instead:
 
-### 3 System Architecture
-
-┌─────────────────────────────────────────────────────┐
-│                  TRADING BOT CYCLE                  │
-└─────────────────────────────────────────────────────┘
-
-1. Data Fetcher (data_fetcher.py)
-   ↓
-   Fetches: Gold_IRR, USD_IRR, Ounce_USD, Oil_USD
-   ↓
-2. Feature Engineer (live_feature_engineering.py)
-   ↓
-   Computes: RSI, MACD, SMA, Bollinger Bands, etc.
-   ↓
-3. Predictor (live_predictor.py)
-   ↓
-   LSTM Model → Predicted Return + Confidence
-   ↓
-4. Signal Generator (live_signal_generator.py)
-   ↓
-   Decision: BUY / SELL / HOLD + Strength
-   ↓
-5. Execution (trading_bot.py)
-   ↓
-   Logs → Notifications → Next Cycle
-
-
-###  Configuration
-
-```python
-# Edit api_layer/api_config.py:
-
-# Trading Schedule
-SIGNAL_GENERATION_INTERVAL = 300  # 5 minutes
-MARKET_OPEN_HOUR = 8
-MARKET_OPEN_MINUTE = 30
-MARKET_CLOSE_HOUR = 16
-MARKET_CLOSE_MINUTE = 30
-TRADING_DAYS = [5, 6, 0, 1, 2]   # Sat-Wed
-
-# Safety Settings
-PAPER_TRADING_MODE = True         # MUST be True initially
-MIN_SIGNAL_CONFIDENCE = 0.6
-MAX_DAILY_TRADES = 5
-MAX_POSITION_SIZE = 0.5
+```json
+{"detail":{"code":"block_dates_unsupported","message":"rows dated 2023-10-27..2025-08-06 are not servable: ... Start after 2025-08-06."}}
 ```
 
-##  Running the Bot
+A 40-row request returns `422 too_few_rows`; a wrong key returns `401 invalid_api_key`.
 
-**Single Cycle (Testing):**
+**No confidence interval.** The old service fabricated one by adding Gaussian noise. With no
+demonstrated edge, a real interval would be either uninformative or falsely precise, so the
+response returns a single log return, the zero-return benchmark beside it, and no interval.
 
-```bash
-cd api_layer
-python trading_bot.py --mode once
-```
+## Data
 
-**Continuous Mode:**
+* **Gold, rial:** TGJU `geram18` (18-karat gold per gram), in **rial**, not toman. Every
+  "toman" label in the legacy document was 10× wrong.
+* **USD/IRR:** TGJU `price_dollar_rl`.
+* **Global gold and oil:** Yahoo Finance `GC=F` (gold ounce) and `BZ=F` (Brent).
 
-```bash
-python trading_bot.py --mode continuous --interval 300
-```
+**The date defect.** From 2023-10-27 to 2025-08-06 (502 raw rows, 36.1% of the frame, entirely
+before the hold-out), Thursday rows vanish and Friday rows appear in both TGJU series. The
+Jalali date field cannot witness this: TGJU derives both date columns from one record, and they
+agree in all 11,331 records. The evidence is alignment against the global series on a fixed row
+set: matching `GC=F` one day later moves the block's same-day correlation from +0.112 to
++0.380, while the same operation outside the block moves it from +0.358 to −0.126. The loader
+therefore relabels the block **+1 day** as a reversible transform (`src/data_loader.py`,
+`apply_block_date_shift`); prices and row counts are untouched and a date collision raises an
+error. The full argument is in `docs/DATA_INTEGRITY.md`.
 
-**With Custom Settings:**
+**The sample.** `data/sample/gold_sample.csv` is the last 200 rows (2025-10-14 to 2026-06-13).
+The full series is **not redistributed**: permission from the source is pending. The scrapers
+are undocumented and may break without notice.
 
-```bash
-python trading_bot.py --mode continuous --interval 60 --no-market-check
-```
+## Limitations and honesty
 
-###  Live Trading Results (Feb 16, 2026)
+* **The hold-out was touched more than once.** The pre-registered protocol says "scored once".
+  In total the hold-out was predicted six times — Stage 3 scored it three times (V1, V2, V3)
+  and the artifact code predicted it once without scoring; Stage 4 added two inference-only
+  passes (a development run and the final run, identical outputs). Three passes were scored.
+  No scored pass was re-run after seeing its result, but the literal "touched once" was not met.
+* **One validation label is a hold-out return.** The last validation row (2025-09-30) has the
+  2025-10-01 return as its target, so one hold-out-period label entered early stopping. It is
+  1 of 173 validation labels and **0.69% of the validation loss** — the label's squared error
+  over the sum of squared errors, computed with the artifact's own predictions
+  (`scripts/d1_share.py`). The 0.50% quoted in earlier drafts was `label² / Σy²`, a
+  zero-prediction approximation, not the loss the model minimised; the review's "0.86" was
+  `label² / mean(y²)`, which is 173× the zero-prediction share (0.4982%) and not a share of the
+  loss. No
+  hold-out feature row was in fitting or validation. Any effect on epoch selection is
+  optimistic for the model by construction, but at 0.69% it cannot change the verdict: the
+  hold-out R² is +0.0001, DM p = 0.4984, 95% CI [−0.0577, +0.0630]. It is recorded, not fixed
+  (`docs/EVAL_PROTOCOL.md` §11 D-1 and the Errata at the end of that file).
+* **The global series is forward-filled onto the Iranian grid.** The ounce and oil inputs are
+  Yahoo daily bars carried onto the Sat-Thu Iranian dates by a left join and forward-fill.
+  Measured on the full training frame: **36%** of the global returns are exactly zero because of
+  the fill, and **19%** of rows have a return spanning more than one global trading day
+  (`scripts/global_grid_audit.py`, `docs/GLOBAL_GRID_AUDIT.md`). The effect of this construction
+  on the results was **not measured**; a sensitivity run is future work. It is not claimed to
+  help or hurt the model.
+* **The hold-out amendment predates the first fit.** The pre-registered protocol was committed
+  at 2026-11-14 17:59:11 +03:30 (`798981a`); the amendment that set the 2025-10-01 cutoff was
+  committed at 2026-11-14 18:02:01 +03:30 (`cb75162`), 1 min 56 s before the first model fit,
+  which `results/run.log` timestamps at 2026-11-14 18:03:57,480. The reason: the first draft
+  said "the final 180 rows", but a data-shape check showed those begin 2025-11-05, which would
+  skip October; the 2025-10-01 cutoff matches the requested period and gives 210 rows.
+* **The hold-out is ~210 rows in a strongly trending nominal series.** Statistical power is
+  low, and the results describe this sample, not future performance. A 210-row window cannot
+  rule out small effects, and it does not support the large, tradeable effect the old document
+  implied.
+* **The served model is the seed-42 artifact.** Stage 3 saved aggregate metrics only, so the
+  per-seed and 5-seed backtests are not recoverable without retraining. Seed 42 was fixed
+  before the run, not chosen afterwards; its hold-out spread is 9.4% of actual, and its
+  correlation is +0.031, so it is typical rather than stronger.
+* **Serving has an EMA warm-up caveat.** MACD uses an exponential moving average seeded at the
+  first supplied row. A short request therefore differs slightly from the full-history feature
+  frame: about 1.6e-4 at 89 rows and 1.1e-8 at 200 rows. The service documents this rather than
+  hiding it.
+* **There is no inflation series in the repository.** Gold in USD is the available
+  currency-neutral proxy, not a real return. It shows +5.97% against +57.89% nominal, but it is
+  still not inflation-adjusted.
+* **The legacy README's numbers are not carried over.** The pre-refactor document quoted
+  metrics that contradicted its own artifacts (price R² presented as skill, a backtest return
+  that did not match the shipped files, toman instead of rial, a different architecture). None
+  of it is repeated here.
+* **The legacy tag exists and is deliberate.** `legacy-pre-refactor` points at the pre-refactor
+  state so the removed bot, MLOps layer and old README remain reachable. Nothing in this branch
+  depends on them.
 
-**System Output - Real-time Trading Signal:**
+## Lessons learned
 
-```
-2026-02-16 14:08:19,903 - TradingBot - INFO -
+* **A high price-level R² can be exactly persistence.** The old artifact reported a price R² of
+  0.9717, and the persistence baseline scores the same 0.9717 (`docs/AUDIT_REPORT.md` §2.4);
+  price levels are so persistent that "tomorrow equals today" scores the same. On log returns,
+  which remove the level, this repository's pre-registered evaluation finds no edge. Always
+  benchmark against the naive forecast.
+* **Directional accuracy can be below "always up".** In this sample the LSTM's 56.16% was
+  worse than always predicting up (56.34%) in walk-forward, and on the hold-out both were
+  51.43%. A directional metric must be compared with the up-day base rate, not 50%.
+* **Raw price levels and distribution shift do not mix.** The legacy feature set used absolute
+  prices, MACD in rial and unbounded levels; a 2025 price is far outside the 2021 training
+  range. The stationary set removed the levels, and the result was still no edge — which is the
+  honest conclusion: feature design alone does not create a signal.
+* **Pre-registering the protocol prevented a better-looking story.** The hold-out, the fold
+  boundaries, the models and the edge rule were fixed before fitting. The one amendment was
+  made before the run. Without that discipline, the walk-forward historical-mean result
+  (p = 0.0055) would have been easy to present as a finding.
+* **Recount the labels before trusting an audit, including your own.** A weekday table in the
+  first audit was rotated by one weekday: the counts were right, the labels were wrong. A
+  direct recount showed the market was a normal Saturday–Wednesday week and that the real
+  defect was a 21-month block, not a uniform shift. The correction changed the entire data
+  plan.
+* **Nominal returns are not real returns.** Gold rose 57.89% in rial over the hold-out while it
+  rose 5.97% in dollars and USD/IRR rose 49.00%. Reporting only the rial number would have
+  described the currency, not the asset.
+* **Training–serving parity is testable and worth testing.** Serving calls the same feature
+  function as training; a parity test compared 696 row-level feature values and the served
+  prediction against the offline path, with a maximum absolute difference of 0.0. The test is
+  cheap and it removes a whole class of silent skew.
+* **Costs decide the economics, not the R².** At a 1.5% round trip the break-even directional
+  accuracy is 108.9% (walk-forward) and 95.4% (hold-out). A model at 51–57% cannot pay for its
+  own trading, which is why the economic check is part of the result rather than an appendix.
 
-╔══════════════════════════════════════════════╗
-║         TRADING SIGNAL SUMMARY               ║
-╚══════════════════════════════════════════════╝
+## License, data terms, citation
 
-📊 Signal: BUY
-📈 Predicted Return: +6.38%
-🎯 Confidence: 85.00%
-💰 Current Price: 185,828,000 IRR
+The **code** is MIT-licensed; see `LICENSE`. The license **does not cover the data**: TGJU and
+Yahoo values remain subject to their sources' terms, and the full series is not redistributed.
+The bundled 200-row sample is included for demonstration only, pending permission from the
+source.
 
-Technical Indicators:
-  • RSI: 96.2
-  • MACD: 9,705,105
-  • Price vs SMA7: +48.38%
-  • Price vs SMA30: +48.38%
+Citation and contact are placeholders for the repository owner to fill:
 
-Reasoning:
-  1. Predicted return 6.38% > threshold 0.80%
-  2. ⚠️  RSI 96.2 overbought - caution
-  3. Price above SMA7 (uptrend)
-  4. MACD 9,705,105 positive
+* **Author / maintainer:** 
+Built by ArshiaAsk as a hands-on project in end-to-end ML engineering and honest model evaluation.
+GitHub: [https://github.com/ArshiaAsk]
 
-⚡ Action Strength: 71%
+* **Contact:** 
+m.arshiaaskarzadeh@gmail.com
+Issues and corrections are welcome, especially anything that contradicts a number
+or claim in this repository.
 
-2026-02-16 14:08:19,904 - Setup - INFO - 
-✓ FULL PIPELINE TEST SUCCESSFUL!
-======================================================================
-  Signal: BUY
-  Predicted Return: +6.38%
-  Confidence: 85.00%
-```
+* **How to cite:** If you reference this work, please cite it as:
 
-**Performance Summary:**
-- ✅ Data fetching: Real-time market data acquisition
-- ✅ Feature engineering: 15 technical features computed
-- ✅ Model prediction: LSTM model confidence 85%
-- ✅ Signal generation: BUY signal with 71% strength
-- ✅ End-to-end latency: <2 seconds
+    @software{gold_irr_honest_forecasting,
+      author  = {Askarzadeh, Arshia},
+      title   = {Forecasting Iranian Gold (IRR): an end-to-end pipeline and an honest negative result},
+      year    = {2026},
+      version = {1.0.0},
+      url     = {https://github.com/ArshiaAsk/Gold-AI-Bot}
+    }
+* **Data permission status:** The code is released under the MIT License. **The license does not cover the data.**
 
-### 3.5 Monitoring
-
-**View Live Dashboard:**
-
-```bash
-python api_layer/dashboard.py
-```
-
-**Check Logs:**
-
-```bash
-tail -f api_layer/logs/trading_bot.log
-tail -f api_layer/logs/signals.log
-```
-
-**Inspect Cache:**
-
-```bash
-cat api_layer/cache/latest_signal.json
-cat api_layer/cache/signal_history.jsonl
-```
-
----
-
-## ⚠️ Disclaimer
-
-**This software is for educational purposes only.**
-
-- NOT financial advice
-- Past performance does not guarantee future results
-- Trading involves substantial risk of loss
-- Author assumes NO liability for financial losses
-- Use at your own risk
-- Consult a financial advisor before live trading
-
----
-
-## 📋 Phase 4: MLOps & Monitoring (IN PROGRESS 🚀)
-
-**Objective:** Production deployment infrastructure and model lifecycle management
-
-**Components to Implement:**
-- [ ] Model versioning and registry (MLflow)
-- [ ] Experiment tracking and logging
-- [ ] Performance monitoring dashboard (Prometheus/Grafana)
-- [ ] Data drift detection system
-- [ ] Automated retraining pipeline
-- [ ] CI/CD integration (GitHub Actions)
-- [ ] Alerting system for anomalies
-- [ ] A/B testing framework
-- [ ] Model serving optimization
-- [ ] Backup and disaster recovery
-
----
-
-
-
-## 🤝 Contributing
-
-This is a professional ML project following best practices:
-
-- **Code Style:** PEP 8, type hints, comprehensive docstrings
-- **Architecture:** Modular design, SOLID principles
-- **Testing:** Unit tests for critical components
-- **Documentation:** Inline comments and comprehensive README
-- **Version Control:** Git with semantic versioning
-- **API Design:** RESTful conventions, OpenAPI 3.0 specs
-
-
----
-
-## 👤 Author
-
-[Arshia Ask]
-
----
-
-**Last Updated**: February 16, 2026 
-
-**Version**: 4.0.0-beta  
-
-**Status**: ✅ Phase 3 Complete - Production Ready | 🚀 Phase 4 MLOps Started
-
-**Model Version:** gold_lstm_v2 (33,441 parameters)
-
-**API Version:** 2.0.0
-
-**Latest Signal (2026-02-16):** BUY | +6.38% | 85% Confidence | 185,828,000 IRR
-
-**Performance:** R² = 0.9938 | MAPE = 1.42% | API Response < 100ms
+- Iranian gold (18-karat gram, IRR) and USD/IRR prices were collected from TGJU;
+  gold ounce (GC=F) and Brent (BZ=F) prices come from Yahoo Finance.
+- I have not obtained permission from either source to redistribute their data.
+  For that reason the full dataset is not included. The repository ships only a
+  200-row sample (`data/sample/`), used to demonstrate the API and the app.
+- `make fetch-data` downloads the data from the original sources. If you use it, you are
+  responsible for complying with their terms of use. The scrapers may break at any time
+  if those sites change.
+- If you are a rights holder and want the sample removed, contact me and I will remove it.

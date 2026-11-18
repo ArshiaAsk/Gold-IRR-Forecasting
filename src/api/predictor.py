@@ -1,265 +1,154 @@
 """
-FastAPI Prediction Service for Gold Price LSTM Model
+Load and run the committed stationary model.
+
+One job: given a (sequence_length, n_features) window produced by
+``src.feature_eng.prepare_model_input``, return the next-trading-day log
+return. All model facts (architecture, sequence length, feature order, seed,
+training window) come from the metadata file that sits next to the artifact —
+nothing about the model is hardcoded here.
+
+Used by both the FastAPI service and the Streamlit app, so the two cannot
+disagree about how a window is scaled or which model is loaded.
 """
-import numpy as np
-import pandas as pd
-import joblib
-import keras
-from typing import Dict, List, Optional
+from __future__ import annotations
+
+import json
 import logging
-from datetime import datetime
+import threading
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List
+
+import joblib
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
-
-class GoldPricePredictor:
-    """Production-ready predictor for gold prices"""
-
-    def __init__(self, model_path: str, scaler_X_path: str, scaler_y_path: str):
-        """  
-        Initialize predictor with trained model and scalers
-        
-        Args:
-            model_path: Path to trained Keras model
-            scaler_X_path: Path to feature scaler
-            scaler_y_path: Path to target scaler
-        """ 
-        self.model_path = model_path
-        self.scaler_X_path = scaler_X_path
-        self.scaler_y_path = scaler_y_path
-
-        # Load model and scaler
-        self._load_model()
-        self._load_scaler()
-
-        logger.info("GoldPricePredictor initialized successfully")
-
-    
-    def _load_model(self):
-        """Load trained Keras model"""
-        try:
-            # Try standard loading first
-            try:
-                self.model = keras.models.load_model(self.model_path)
-            except Exception as first_error:
-                # Keras 3.x compatibility issue - filter out quantization_config errors
-                logger.warning(f"Standard load failed: {first_error}. Attempting with custom objects...")
-                
-                # Define custom objects to handle compatibility issues
-                import warnings
-                with warnings.catch_warnings():
-                    warnings.filterwarnings('ignore')
-                    
-                    # Try with compile=False to avoid certain configs
-                    self.model = keras.models.load_model(self.model_path, compile=False)
-                    # Recompile with safe defaults
-                    self.model.compile(
-                        optimizer='adam',
-                        loss='mse',
-                        metrics=['mae']
-                    )
-            
-            logger.info(f"Model loaded from {self.model_path}")
-        except Exception as e:
-            logger.error(f"Failed to load model: {e}")
-            raise
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+MODELS_DIR = BASE_DIR / "models"
+METADATA_NAME = "gold_lstm_stationary_v2.metadata.json"
 
 
-    def _load_scaler(self):
-        """Load fitted scalers"""
-        try:
-            self.scaler_X = joblib.load(self.scaler_X_path)
-            self.scaler_y = joblib.load(self.scaler_y_path)
-            logger.info(f"Scalers loaded successfully")
-        except Exception as e:
-            logger.error(f"Failed to load scalers: {e}")
-            raise
+class ArtifactMissing(RuntimeError):
+    """The model, a scaler or the metadata file is absent."""
+
+    def __init__(self, paths: List[Path]):
+        self.paths = [str(p) for p in paths]
+        super().__init__(
+            "Model artifacts are missing: " + ", ".join(self.paths)
+        )
 
 
-    def _validate_features(self, features: np.ndarray, expected_shape: tuple) -> bool:
+@dataclass
+class ServingBundle:
+    """The loaded artifact plus the metadata that describes it."""
+
+    model: Any
+    scaler_X: Any
+    scaler_y: Any
+    metadata: Dict[str, Any]
+    model_path: Path
+    metadata_path: Path
+    _lock: threading.Lock
+
+    @property
+    def sequence_length(self) -> int:
+        return int(self.metadata["sequence_length"])
+
+    @property
+    def feature_columns(self) -> List[str]:
+        return list(self.metadata["feature_columns"])
+
+    @property
+    def n_features(self) -> int:
+        return len(self.feature_columns)
+
+    @property
+    def model_id(self) -> str:
+        return Path(self.metadata["artifact"]).stem
+
+    def predict_log_return(self, X: np.ndarray) -> float:
         """
-        Validate input features
-        
+        Scale ``X`` with the training scaler, run the model, invert the target.
+
         Args:
-            features: Input feature array
-            expected_shape: Expected shape (sequence_length, n_features)
-            
+            X: (sequence_length, n_features) array from the shared feature code.
+
         Returns:
-            True if valid
+            Predicted next-trading-day log return, in the units the scaler_y
+            was fitted on (log returns).
         """
-        # Check if the shape matches (ignoring batch dimension if passed as single sample)
-        if features.shape != expected_shape:
-            raise ValueError(
-                f"Invalid feature shape. Expected {expected_shape}, got {features.shape}"
-            )
-        return True
-    
+        X = np.asarray(X, dtype=float)
+        expected = (self.sequence_length, self.n_features)
+        if X.shape != expected:
+            raise ValueError(f"expected input shape {expected}, got {X.shape}")
 
-    def predict_log_return(self, features: np.ndarray) -> float:
-        """
-        Predict next day log return
-        
-        Args:
-            features: Feature array of shape (sequence_length, n_features)
-            
-        Returns:
-            Predicted log return
-        """
-        # Validate
-        expected_shape = (30, 15)   # (sequence_length, n_features)
-        self._validate_features(features, expected_shape)
-
-        # Scale features
-        # We need to flatten to 2D for scaler, then reshape back to 3D for LSTM
-        features_2d = features.reshape(-1, features.shape[-1])
-        features_scaled = self.scaler_X.transform(features_2d)
-        
-        # Reshape to (1, 30, 15) for model input (Batch size of 1)
-        features_scaled = features_scaled.reshape(1, *expected_shape)
-
-        # predict
-        log_return_scaled = self.model.predict(features_scaled, verbose=0)
-        
-        # Inverse transform the prediction to get real log return
-        log_return = self.scaler_y.inverse_transform(log_return_scaled)[0, 0]
-
+        scaled = self.scaler_X.transform(X).reshape(1, *expected)
+        with self._lock:
+            # Keras inference on one model object is not documented as
+            # thread-safe; one forward pass is cheap, so serialise it.
+            pred_scaled = self.model.predict(scaled, verbose=0)
+        log_return = self.scaler_y.inverse_transform(
+            np.asarray(pred_scaled).reshape(-1, 1)
+        )[0, 0]
         return float(log_return)
-    
-
-    def predict_price(self, features: np.ndarray, current_price: float) -> Dict[str, float]:
-        """
-        Predict next day price
-        
-        Args:
-            features: Feature array of shape (sequence_length, n_features)
-            current_price: Current gold price
-            
-        Returns:
-            Dictionary with prediction details
-        """
-        # Get log return prediction
-        log_return = self.predict_log_return(features)
-
-        # Calculate predicted price
-        # Formula: New Price = Old Price * exp(Log Return)
-        predicted_price = current_price * np.exp(log_return)
-        price_change = predicted_price - current_price
-        price_change_pct = (np.exp(log_return) - 1) * 100
-
-        return {
-            'current_price': float(current_price),
-            'predicted_price': float(predicted_price),
-            'price_change': float(price_change),
-            'price_change_percent': float(price_change_pct),
-            'predicted_log_return': float(log_return),
-            'prediction_timestamp': datetime.now().isoformat()
-        }  
-    
-
-    def predict_with_confidence(
-        self,
-        features: np.ndarray,
-        current_price: float,
-        n_simulations: int 
-    ) -> Dict [str, float]:
-        """
-        Predict with Monte Carlo confidence intervals
-        (This is a simplified simulation based on model uncertainty if using Dropout, 
-         or just repeating prediction if model is deterministic)
-        
-        Args:
-            features: Feature array
-            current_price: Current price
-            n_simulations: Number of MC simulations
-            
-        Returns:
-            Prediction with confidence intervals
-        """
-        predictions = []
-        
-        # Note: Standard Keras models are deterministic during inference unless 
-        # training=True is passed or MCDropout is used. 
-        # For now, we will simulate uncertainty or use the single prediction.
-        
-        # Ideally, you would run this in a loop with training=True to get variance
-        # specific_prediction = self.predict_price(features, current_price)
-        
-        # Placeholder for actual MC Dropout logic:
-        base_pred = self.predict_price(features, current_price)['predicted_price']
-        
-        # Adding artificial noise for demonstration (Replace with real MC Dropout later)
-        # This assumes a small standard deviation error
-        noise = np.random.normal(0, base_pred * 0.005, n_simulations) 
-        predictions = base_pred + noise
-
-        return {
-            'current_price': float(current_price),
-            'predicted_price': float(np.mean(predictions)),
-            'confidence_interval_95': {
-                'lower': float(np.percentile(predictions, 2.5)),
-                'upper': float(np.percentile(predictions, 97.5))
-            },
-            'std_dev': float(np.std(predictions)),
-            'prediction_timestamp': datetime.now().isoformat()
-        }
-    
 
 
-class FeatureBuilder:
-    """Build features from raw market data"""
+def load_metadata(path: Path = MODELS_DIR / METADATA_NAME) -> Dict[str, Any]:
+    """Read the artifact metadata. Raises ``ArtifactMissing`` if absent."""
+    path = Path(path)
+    if not path.exists():
+        raise ArtifactMissing([path])
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-    def __init__(self, sequence_length: int = 30):
-        """
-        Initialize feature builder
-        
-        Args:
-            sequence_length: Number of time steps to use
-        """
-        self.sequence_length = sequence_length
 
-    
-    def build_features_from_history(self, history_df: pd.DataFrame) -> np.ndarray:
-        """
-        Build feature array from historical data
-        
-        Args:
-            history_df: DataFrame with historical data (most recent last)
-                       Must have at least sequence_length rows
-            
-        Returns:
-            Feature array of shape (sequence_length, n_features)
-        """
-        if len(history_df) < self.sequence_length:
-            raise ValueError(
-                f"Need at least {self.sequence_length} historical records, "
-                f"got {len(history_df)}"
-            )
-        
-        # Get last sequence_length rows
-        recent_data = history_df.tail(self.sequence_length)
+def load_bundle(models_dir: Path = MODELS_DIR) -> ServingBundle:
+    """
+    Load the model, both scalers and the metadata exactly once.
 
-        # Expected feature columns (same as training)
-        feature_columns = [
-            'Gold_LogRet', 'USD_LogRet', 'Ounce_LogRet', 'Oil_LogRet',
-            'SMA_7', 'RSI_14', 'MACD', 'MACD_Signal',
-            'Bollinger_Upper', 'Bollinger_Lower',
-            'Gold_LogRet_Lag_1', 'Gold_LogRet_Lag_2', 'Gold_LogRet_Lag_3',
-            'USD_LogRet_Lag_1', 'USD_LogRet_Lag_2'
-        ]
+    Paths are taken from the metadata's ``artifact`` and ``scalers`` entries,
+    resolved against ``models_dir``, so moving the artifact does not require a
+    code change as long as the metadata moves with it.
+    """
+    models_dir = Path(models_dir)
+    metadata_path = models_dir / METADATA_NAME
+    metadata = load_metadata(metadata_path)
 
-        # Check if columns exist
-        missing_cols = [col for col in feature_columns if col not in recent_data.columns]
-        if missing_cols:
-            raise ValueError(f"Missing columns in historical data: {missing_cols}")
+    model_path = models_dir / Path(metadata["artifact"]).name
+    scaler_paths = [models_dir / Path(p).name for p in metadata["scalers"]]
+    missing = [p for p in [model_path, *scaler_paths] if not p.exists()]
+    if missing:
+        raise ArtifactMissing(missing)
 
-        # Extract features
-        features = recent_data[feature_columns].values
-        if not np.isfinite(features).all():
-            raise ValueError("Historical data contains NaN/Inf values in feature columns")
+    import keras
 
-        # Lightweight guardrail against obviously invalid values.
-        if np.max(np.abs(features)) > 1e9:
-            raise ValueError("Historical feature values are out of expected numeric bounds")
+    # compile=False: inference only, and it avoids re-running the optimizer
+    # config that the legacy artifact needed workarounds for.
+    model = keras.models.load_model(str(model_path), compile=False)
+    scaler_X, scaler_y = (joblib.load(str(p)) for p in scaler_paths)
 
-        return features
+    if scaler_X.n_features_in_ != len(metadata["feature_columns"]):
+        raise ValueError(
+            f"scaler_X expects {scaler_X.n_features_in_} features, metadata "
+            f"lists {len(metadata['feature_columns'])}"
+        )
+    if tuple(model.input_shape[1:]) != (
+        int(metadata["sequence_length"]),
+        len(metadata["feature_columns"]),
+    ):
+        raise ValueError(
+            f"model input shape {model.input_shape} disagrees with metadata"
+        )
+
+    logger.info("Loaded %s (%d params) from %s", metadata["artifact"],
+                int(model.count_params()), model_path)
+    return ServingBundle(
+        model=model,
+        scaler_X=scaler_X,
+        scaler_y=scaler_y,
+        metadata=metadata,
+        model_path=model_path,
+        metadata_path=metadata_path,
+        _lock=threading.Lock(),
+    )

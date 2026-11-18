@@ -1,224 +1,205 @@
 """
-FastAPI Application for Gold Price Prediction
+Minimal FastAPI service for the committed stationary LSTM.
+
+Three endpoints (decision D12): ``/health``, ``/model-info``, ``/predict``.
+The caller sends recent **raw daily rows**; the service turns them into model
+input with ``src.feature_eng.prepare_model_input`` — the same function training
+and evaluation use — so there is no second feature implementation.
+
+The model has no demonstrated predictive edge (D24/D25). The response says so
+in a fixed ``statement`` and a ``caveats`` list, returns a log return rather
+than a price headline, and never returns a confidence interval.
+
+The contract is docs/SERVING_DESIGN.md.
 """
-from fastapi import FastAPI, HTTPException, status, Request, Depends, Query
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
-from contextlib import asynccontextmanager
-from pydantic import BaseModel, Field, validator
-from typing import Dict, Optional, List, Any
-import numpy as np
-import pandas as pd
-from datetime import datetime
+from __future__ import annotations
+
+import json
 import logging
 import os
-import time
-import shutil
-import resource
+from contextlib import asynccontextmanager
+from datetime import date as date_type
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+import numpy as np
+import pandas as pd
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from config.logging import setup_logging
-from src.mlops.api_integration import initialize_mlops
-from src.mlops.background_tasks import UptimeTracker
-from src.mlops.audit_store import AuditStore
-from src.mlops.prediction_router import PredictionRouter
-from src.api.security import (
-    AUTH_REQUIRED,
-    RATE_LIMIT_ENABLED,
-    rate_limiter,
-    require_api_key,
-    client_key,
+from src.api.predictor import ArtifactMissing, ServingBundle, load_bundle
+from src.api.security import require_api_key
+from src.feature_eng import (
+    MAX_HISTORY_ROWS,
+    MIN_HISTORY_ROWS,
+    RAW_PRICE_COLUMNS,
+    InputError,
+    prepare_model_input,
 )
 
-try:
-    # Package imports
-    from src.api.predictor import GoldPricePredictor, FeatureBuilder
-except ImportError:
-    # Script-style import
-    from predictor import GoldPricePredictor, FeatureBuilder
-
-# Setup logging
 setup_logging(base_log_dir="logs", level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
-# --- Pydantic Schemas ---
-class PredictionRequest(BaseModel):
-    """Request model for price prediction"""
-    features: List[List[float]] = Field(
-        ...,
-        description="Feature array of shape (sequence_length, n_features)",
-        min_items=30,
-        max_items=30
-    )
-    current_price: float = Field(
-        ...,
-        description="Current gold price in Toman",
-        gt=0
-    )
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+RESULTS_DIR = BASE_DIR / "results"
+PRIMARY_RESULTS = RESULTS_DIR / "eval_V2.json"
+BACKTEST_RESULTS = RESULTS_DIR / "backtest.json"
 
-    @validator('features')
-    def validate_features(cls, v):
-        if not all(len(row) == 15 for row in v):
-            raise ValueError("Each feature row must have exactly 15 features")
-        arr = np.array(v, dtype=float)
-        if not np.isfinite(arr).all():
-            raise ValueError("Features must contain only finite numeric values")
-        if np.max(np.abs(arr)) > 1e9:
-            raise ValueError("Features are out of expected numeric range")
-        return v
+STALE_AFTER_DAYS = 7
 
+STATEMENT = (
+    "This model has no demonstrated predictive edge: its log-return accuracy is "
+    "indistinguishable from a zero-return benchmark and the economic test finds "
+    "no value over buy-and-hold. See docs/RESULTS.md."
+)
 
-class HistoricalDataRequest(BaseModel):
-    """Request model using historical data"""
-    historical_data: List[Dict[str, float]] = Field(
-        ...,
-        description="Historical market data (at least 30 days)",
-        min_items=30
-    )
-    current_price: float = Field(..., gt=0)
+CAVEATS = [
+    "No demonstrated predictive edge: log-return R2 is indistinguishable from "
+    "zero and the economic test finds no value over buy-and-hold "
+    "(docs/RESULTS.md).",
+    "The output is a single next-trading-day log return, not a price forecast; "
+    "the implied price is persistence-equivalent.",
+    "Metrics come from a ~210-row trending hold-out and are not a claim about "
+    "future performance.",
+    "Serving history shorter than ~400 rows differs from the full-history "
+    "feature frame in the MACD EMA seed (1.6e-4 at 89 rows, 1.1e-8 at 200).",
+]
 
-    @validator("historical_data")
-    def validate_historical_data(cls, value):
-        if not value:
-            raise ValueError("historical_data cannot be empty")
-        for idx, row in enumerate(value):
-            for key, item in row.items():
-                try:
-                    numeric = float(item)
-                except Exception as exc:
-                    raise ValueError(f"historical_data[{idx}]['{key}'] must be numeric") from exc
-                if not np.isfinite(numeric):
-                    raise ValueError(f"historical_data[{idx}]['{key}'] must be finite")
-        return value
+HOLDOUT_METRIC_KEYS = [
+    "n", "rmse", "mae", "r2_zero", "r2_histmean", "dir_acc",
+    "dm_p_one_sided", "boot_r2_lo", "boot_r2_hi", "std_pred", "std_actual", "corr",
+]
+
+# --- Schemas ---
+
+# The sample CSV header is Date,Gold_IRR,USD_IRR,Ounce_USD,Oil_USD. The JSON
+# contract historically used `date`; both spellings are accepted so a caller can
+# post a CSV row without renaming. The four price fields already have the same
+# name in both forms. A request carrying both date aliases with different values
+# is rejected rather than silently choosing one.
+FIELD_ALIASES = {
+    "date": ("date", "Date"),
+    "Gold_IRR": ("Gold_IRR",),
+    "USD_IRR": ("USD_IRR",),
+    "Ounce_USD": ("Ounce_USD",),
+    "Oil_USD": ("Oil_USD",),
+}
 
 
-class PredictionResponse(BaseModel):
-    """Response model for prediction"""
-    success: bool
-    prediction: Dict[str, Any]
-    timestamp: str
+class DailyRow(BaseModel):
+    """One raw daily observation, in the units of the raw dataset."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    date: date_type = Field(validation_alias=AliasChoices(*FIELD_ALIASES["date"]))
+    Gold_IRR: float = Field(validation_alias=AliasChoices(*FIELD_ALIASES["Gold_IRR"]))
+    USD_IRR: float = Field(validation_alias=AliasChoices(*FIELD_ALIASES["USD_IRR"]))
+    Ounce_USD: float = Field(validation_alias=AliasChoices(*FIELD_ALIASES["Ounce_USD"]))
+    Oil_USD: float = Field(validation_alias=AliasChoices(*FIELD_ALIASES["Oil_USD"]))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_conflicting_aliases(cls, data: Any) -> Any:
+        """Accept both date aliases, but not with two different values."""
+        if not isinstance(data, dict):
+            return data
+        for field, aliases in FIELD_ALIASES.items():
+            present = [alias for alias in aliases if alias in data]
+            if len(present) > 1:
+                first = data[present[0]]
+                if any(data[alias] != first for alias in present[1:]):
+                    shown = ", ".join(f"{alias}={data[alias]!r}" for alias in present)
+                    raise ValueError(f"conflicting values for {field}: {shown}")
+        return data
+
+
+class PredictRequest(BaseModel):
+    rows: List[DailyRow]
 
 
 class HealthResponse(BaseModel):
-    """Health check response"""
     status: bool
     model_loaded: bool
     timestamp: str
-    checks: Dict[str, Any] = Field(default_factory=dict)
 
 
-class ErrorResponse(BaseModel):
-    """Error response model"""
-    success: bool = False
-    error: str
-    detail: Optional[str] = None
+# --- State and lifespan ---
 
-
-# --- Global State & Lifespan ---
-
-# Dictionary to store loaded models and tools
-model_artifacts = {
-    "predictor": None,
-    "feature_builder": None,
-    "prediction_router": None,
-    "onnx_path": None,
+state: Dict[str, Any] = {
+    "bundle": None,
     "status": "startup",
+    "results": {},
+    "results_error": None,
 }
 
-mlops_artifacts = {
-    "integration": None,
-    "uptime_tracker": UptimeTracker(),
-    "audit_store": None,
-}
+
+def _read_json(path: Path) -> Optional[Dict[str, Any]]:
+    if not path.exists():
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _rel(path: Path) -> str:
+    """Path relative to the repo root when possible, else absolute."""
+    try:
+        return str(Path(path).relative_to(BASE_DIR))
+    except ValueError:
+        return str(path)
+
+
+def _load_results() -> None:
+    """Read the committed evaluation and backtest results, once, at startup."""
+    try:
+        state["results"] = {
+            "eval_V2": _read_json(PRIMARY_RESULTS),
+            "backtest": _read_json(BACKTEST_RESULTS),
+        }
+        missing = [p.name for p, v in ((PRIMARY_RESULTS, state["results"]["eval_V2"]),
+                                       (BACKTEST_RESULTS, state["results"]["backtest"]))
+                   if v is None]
+        if missing:
+            state["results_error"] = f"missing results file(s): {', '.join(missing)}"
+            logger.warning("Results files missing: %s", ", ".join(missing))
+    except (OSError, json.JSONDecodeError) as exc:
+        state["results_error"] = f"could not read results: {exc}"
+        logger.error("Could not read results: %s", exc)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Lifespan context manager:
-    Runs before the app starts accepting requests (startup)
-    and after it finishes (shutdown).
-    """
-    logger.info("🚀 Starting up... Loading models.")
-    
+    """Load the model once; never prevent the server from starting."""
+    _load_results()
     try:
-        # Define paths (Relative to project root)
-        # Assuming run from project root: python src/api/main.py
-        base_path = Path(__file__).resolve().parent.parent.parent
-        model_path = base_path / "models" / "gold_lstm_v2.keras"
-        scaler_X_path = base_path / "models" / "scaler_X.pkl"
-        scaler_y_path = base_path / "models" / "scaler_y.pkl"
+        state["bundle"] = load_bundle()
+        state["status"] = "ready"
+        logger.info("Serving %s", state["bundle"].metadata["artifact"])
+    except ArtifactMissing as exc:
+        state["status"] = "model_missing"
+        logger.warning("%s. Server starts; /predict returns 503.", exc)
+    except Exception as exc:  # keep /health alive for diagnosis
+        state["status"] = "failed"
+        logger.error("Failed to load model: %s", exc)
 
-        logger.info("Looking for model at: %s", model_path)
+    yield
 
-        # Check if files exist to give better error messages
-        if not model_path.exists():
-            logger.warning("⚠️ Model file not found at %s", model_path)
-            # We don't raise here, so the server can still start for debugging
-        else:
-            # Load predictor
-            predictor = GoldPricePredictor(
-                model_path=str(model_path),
-                scaler_X_path=str(scaler_X_path),
-                scaler_y_path=str(scaler_y_path)
-            )
-            model_artifacts["predictor"] = predictor
-
-            # Initialize feature builder
-            feature_builder = FeatureBuilder(sequence_length=30)
-            model_artifacts["feature_builder"] = feature_builder
-            
-            model_artifacts["status"] = "ready"
-            logger.info("✅ Model and predictor loaded successfully")
-
-            if os.getenv("ONNX_EXPORT_ENABLED", "true").lower() in {"1", "true", "yes"}:
-                from src.mlops.onnx_exporter import ensure_onnx_artifact
-
-                onnx_path = ensure_onnx_artifact(str(model_path))
-                model_artifacts["onnx_path"] = onnx_path
-                if onnx_path:
-                    logger.info("✅ ONNX artifact ready at %s", onnx_path)
-
-        integration = initialize_mlops()
-        mlops_artifacts["integration"] = integration
-        predictor = model_artifacts.get("predictor")
-        if predictor is not None:
-            model_artifacts["prediction_router"] = PredictionRouter(
-                default_predictor=predictor,
-                registry=integration.pipeline.registry,
-                scaler_X_path=str(scaler_X_path),
-                scaler_y_path=str(scaler_y_path),
-            )
-        logger.info("✅ MLOps integration initialized")
-        audit_store = AuditStore.from_env()
-        mlops_artifacts["audit_store"] = audit_store
-        logger.info("✅ Audit store initialized (healthy=%s)", audit_store.ping())
-            
-    except Exception as e:
-        logger.error("❌ Critical error during startup: %s", e)
-        model_artifacts["status"] = "failed"
-        # We purposely do NOT raise e, to keep the /health endpoint alive
-
-    yield  # Application runs here
-
-    # Shutdown logic
-    logger.info("🛑 Shutting down...")
-    integration = mlops_artifacts.get("integration")
-    if integration is not None:
-        integration.stop()
-    mlops_artifacts["integration"] = None
-    mlops_artifacts["audit_store"] = None
-    model_artifacts.clear()
+    state["bundle"] = None
+    state["status"] = "shutdown"
 
 
-# Initialize FastAPI app with lifespan
 app = FastAPI(
-    title="Gold Price Prediction API",
-    description="LSTM-based Gold Price Prediction Service for Iranian Market",
-    version="1.0.0",
-    lifespan=lifespan
+    title="Gold in IRR — honest next-day return model",
+    description=(
+        "Serves the committed stationary LSTM (seed 42, V2). The model has no "
+        "demonstrated predictive edge; see docs/RESULTS.md."
+    ),
+    version="3.0.0",
+    lifespan=lifespan,
 )
+
 
 def _cors_origins() -> List[str]:
     raw = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:3000,http://localhost:8000")
@@ -226,7 +207,6 @@ def _cors_origins() -> List[str]:
     return origins or ["http://localhost:3000", "http://localhost:8000"]
 
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
@@ -235,543 +215,168 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
-PROTECTED_PATH_PREFIXES = ("/predict", "/mlops", "/model-info")
-EXEMPT_PATHS = ("/", "/docs", "/openapi.json", "/health", "/metrics")
-
-
-@app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    if not RATE_LIMIT_ENABLED:
-        return await call_next(request)
-
-    path = request.url.path
-    if path in EXEMPT_PATHS:
-        return await call_next(request)
-    if not any(path.startswith(prefix) for prefix in PROTECTED_PATH_PREFIXES):
-        return await call_next(request)
-
-    key = client_key(request)
-    if not rate_limiter.allow(key):
-        retry_after = rate_limiter.retry_after_seconds(key)
-        return JSONResponse(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            content={"detail": "Rate limit exceeded"},
-            headers={"Retry-After": str(retry_after)},
-        )
-
-    return await call_next(request)
-
 
 # --- Endpoints ---
 
-@app.get("/", response_model=Dict[str, str])
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "Gold Price Prediction API",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/health",
-        "metrics": "/metrics",
-        "mlops_health": "/mlops/health",
-        "mlops_registry": "/mlops/model-registry",
-        "mlops_ab_test": "/mlops/ab-test",
-        "mlops_experiments": "/mlops/experiments",
-        "mlops_model_card": "/mlops/model-card",
-    }
-
 
 @app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint"""
-    is_ready = model_artifacts["status"] == "ready"
-    audit_store = mlops_artifacts.get("audit_store")
-    checks = _health_checks(audit_store=audit_store, model_ready=is_ready)
-    overall_ok = is_ready and checks["disk_ok"] and checks["memory_ok"] and checks["audit_store_ok"]
+def health_check():
+    """Liveness plus whether the artifacts were loaded. No auth, no model call."""
+    is_ready = state["status"] == "ready"
     return HealthResponse(
-        status=overall_ok,
+        status=is_ready,
         model_loaded=is_ready,
         timestamp=datetime.now().isoformat(),
-        checks=checks,
     )
 
 
-@app.post("/predict", response_model=PredictionResponse)
-async def predict_price(
-    request: PredictionRequest,
-    http_request: Request,
-    _: None = Depends(require_api_key),
-):
-    """  
-    Predict next day gold price using raw features
-    """
-    predictor, routing_meta = _resolve_predictor(http_request)
-    
-    if predictor is None:
+def _require_bundle() -> ServingBundle:
+    bundle = state["bundle"]
+    if bundle is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model is not loaded. Check server logs."
+            detail={
+                "code": "model_not_loaded",
+                "message": f"model artifacts not loaded (status: {state['status']})",
+            },
         )
-    
-    try:
-        start = time.perf_counter()
-        # Convert to numpy array
-        features = np.array(request.features)
-
-        # Make prediction
-        result = predictor.predict_price(features, request.current_price)
-        result["routing"] = routing_meta
-        latency = time.perf_counter() - start
-
-        integration = mlops_artifacts.get("integration")
-        if integration is not None:
-            integration.metrics_exporter.record_prediction(latency_seconds=latency, confidence=None)
-        _log_prediction_audit(
-            endpoint="/predict",
-            request=http_request,
-            result=result,
-            latency_seconds=latency,
-            success=True,
-        )
-
-        return PredictionResponse(
-            success=True,
-            prediction=result,
-            timestamp=datetime.now().isoformat()
-        )
-    
-    except Exception as e:
-        logger.error("Prediction error: %s", e)
-        integration = mlops_artifacts.get("integration")
-        if integration is not None:
-            integration.metrics_exporter.record_api_error()
-        mlops_artifacts["uptime_tracker"].record_error()
-        _log_prediction_audit(
-            endpoint="/predict",
-            request=http_request,
-            result=None,
-            latency_seconds=None,
-            success=False,
-            error_text=str(e),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction Failed: {str(e)}"
-        )
+    return bundle
 
 
-@app.post("/predict-with-confidence", response_model=PredictionResponse)
-async def predict_with_confidence(
-    request: PredictionRequest,
-    http_request: Request,
-    n_simulations: int = Query(..., ge=10, le=10000),
-    _: None = Depends(require_api_key),
-):
-    """
-    Predict with Monte Carlo confidence intervals
-    """
-    predictor, routing_meta = _resolve_predictor(http_request)
-    
-    if predictor is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model is not loaded."
-        )
-    
-    try:
-        start = time.perf_counter()
-        features = np.array(request.features)
-
-        result = predictor.predict_with_confidence(
-            features,
-            request.current_price,
-            n_simulations=n_simulations
-        )
-        result["routing"] = routing_meta
-        latency = time.perf_counter() - start
-
-        integration = mlops_artifacts.get("integration")
-        if integration is not None:
-            integration.metrics_exporter.record_prediction(latency_seconds=latency, confidence=None)
-        _log_prediction_audit(
-            endpoint="/predict-with-confidence",
-            request=http_request,
-            result=result,
-            latency_seconds=latency,
-            success=True,
-        )
-
-        return PredictionResponse(
-            success=True,
-            prediction=result,
-            timestamp=datetime.now().isoformat()
-        )
-    
-    except Exception as e:
-        logger.error("Prediction error: %s", e)
-        integration = mlops_artifacts.get("integration")
-        if integration is not None:
-            integration.metrics_exporter.record_api_error()
-        mlops_artifacts["uptime_tracker"].record_error()
-        _log_prediction_audit(
-            endpoint="/predict-with-confidence",
-            request=http_request,
-            result=None,
-            latency_seconds=None,
-            success=False,
-            error_text=str(e),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {str(e)}"
-        )
-
-
-@app.post("/predict-from-history", response_model=PredictionResponse)
-async def predict_from_history(
-    request: HistoricalDataRequest,
-    http_request: Request,
-    _: None = Depends(require_api_key),
-):
-    """
-    Predict using historical market data (auto feature extraction)
-    """
-    predictor, routing_meta = _resolve_predictor(http_request)
-    feature_builder = model_artifacts.get("feature_builder")
-    
-    if predictor is None or feature_builder is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model or Feature Builder not loaded."
-        )
-    
-    try:
-        start = time.perf_counter()
-        # Convert to DataFrame
-        df = pd.DataFrame(request.historical_data)
-
-        # Build features
-        features = feature_builder.build_features_from_history(df)
-
-        # Make Prediction
-        result = predictor.predict_price(features, request.current_price)
-        result["routing"] = routing_meta
-        latency = time.perf_counter() - start
-
-        integration = mlops_artifacts.get("integration")
-        if integration is not None:
-            integration.metrics_exporter.record_prediction(latency_seconds=latency, confidence=None)
-        _log_prediction_audit(
-            endpoint="/predict-from-history",
-            request=http_request,
-            result=result,
-            latency_seconds=latency,
-            success=True,
-        )
-
-        return PredictionResponse(
-            success=True,
-            prediction=result,
-            timestamp=datetime.now().isoformat()
-        )
-        
-    except ValueError as ve:
-        # Feature validation errors
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(ve)
-        )
-    except Exception as e:
-        logger.error("Prediction error: %s", e)
-        integration = mlops_artifacts.get("integration")
-        if integration is not None:
-            integration.metrics_exporter.record_api_error()
-        mlops_artifacts["uptime_tracker"].record_error()
-        _log_prediction_audit(
-            endpoint="/predict-from-history",
-            request=http_request,
-            result=None,
-            latency_seconds=None,
-            success=False,
-            error_text=str(e),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {str(e)}"
-        )
-
-
-@app.get("/metrics")
-async def metrics():
-    """Prometheus metrics endpoint."""
-    integration = mlops_artifacts.get("integration")
-    if integration is not None:
-        uptime = mlops_artifacts["uptime_tracker"].uptime_ratio()
-        integration.metrics_exporter.set_api_uptime_ratio(uptime)
-        payload = generate_latest(integration.metrics_exporter.registry)
-    else:
-        payload = generate_latest()
-    return Response(content=payload, media_type=CONTENT_TYPE_LATEST)
-
-
-@app.get("/mlops/health")
-async def mlops_health(_: None = Depends(require_api_key)):
-    """MLOps runtime health endpoint."""
-    integration = mlops_artifacts.get("integration")
-    if integration is None:
-        return {"status": "degraded", "reason": "MLOps integration is not initialized"}
-    return integration.health()
-
-
-@app.get("/mlops/model-registry")
-async def mlops_model_registry(name: Optional[str] = None, _: None = Depends(require_api_key)):
-    """List model versions in registry."""
-    integration = mlops_artifacts.get("integration")
-    if integration is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MLOps integration is not initialized",
-        )
-    return {"models": integration.list_registry(name=name)}
-
-
-@app.get("/mlops/ab-test")
-async def mlops_ab_test(_: None = Depends(require_api_key)):
-    """A/B canary routing status."""
-    integration = mlops_artifacts.get("integration")
-    if integration is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MLOps integration is not initialized",
-        )
-    return integration.phase5.ab_router.status()
-
-
-@app.post("/mlops/ab-test/promote")
-async def mlops_ab_promote(_: None = Depends(require_api_key)):
-    """Promote canary model to production."""
-    integration = mlops_artifacts.get("integration")
-    if integration is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MLOps integration is not initialized",
-        )
-    try:
-        promoted = integration.phase5.ab_router.promote_canary()
-        integration.pipeline.baseline_metrics = {
-            k: float(promoted.get("metrics", {}).get(k, integration.pipeline.baseline_metrics[k]))
-            for k in ("rmse", "mae", "r2", "mape")
-            if k in integration.pipeline.baseline_metrics
-        }
-        return {"status": "promoted", "model": promoted}
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-
-
-@app.post("/mlops/ab-test/disable")
-async def mlops_ab_disable(_: None = Depends(require_api_key)):
-    """Disable canary routing and archive canary model."""
-    integration = mlops_artifacts.get("integration")
-    if integration is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MLOps integration is not initialized",
-        )
-    integration.phase5.ab_router.disable_canary()
-    return {"status": "canary_disabled"}
-
-
-@app.get("/mlops/experiments")
-async def mlops_experiments(
-    max_results: int = Query(10, ge=1, le=100),
-    _: None = Depends(require_api_key),
-):
-    """List recent MLflow experiment runs."""
-    integration = mlops_artifacts.get("integration")
-    if integration is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MLOps integration is not initialized",
-        )
-    return {
-        "tracking_enabled": integration.phase5.experiment_tracker.enabled,
-        "runs": integration.phase5.list_experiments(max_results=max_results),
-    }
-
-
-@app.get("/mlops/model-card")
-async def mlops_model_card(
-    version: Optional[int] = None,
-    name: str = "gold_lstm",
-    _: None = Depends(require_api_key),
-):
-    """Generate governance model card for a registry version."""
-    integration = mlops_artifacts.get("integration")
-    if integration is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MLOps integration is not initialized",
-        )
-    try:
-        card = integration.phase5.generate_model_card(version=version, name=name)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return {"card": card, "available_cards": integration.phase5.list_model_cards()}
+def _metric_summary(block: Dict[str, Any]) -> Dict[str, Any]:
+    """Selected metrics, with undefined (NaN) values as null, not NaN."""
+    out = {}
+    for model, metrics in block.items():
+        row = {}
+        for k in HOLDOUT_METRIC_KEYS:
+            v = metrics.get(k)
+            row[k] = v if not (isinstance(v, float) and not np.isfinite(v)) else None
+        out[model] = row
+    return out
 
 
 @app.get("/model-info")
-async def get_model_info(_: None = Depends(require_api_key)):
-    """Get information about the loaded model"""
-    predictor = model_artifacts.get("predictor")
-    
-    if predictor is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model not loaded"
-        )
-    
-    try:
-        integration = mlops_artifacts.get("integration")
-        phase5_status = integration.phase5.status() if integration else None
-        model_summary = {
-            "model_path": predictor.model_path,
-            "onnx_path": model_artifacts.get("onnx_path"),
-            "phase5": phase5_status,
-            "input_shape": str(predictor.model.input_shape),
-            "output_shape": str(predictor.model.output_shape),
-            # Count params might be tricky if model isn't built fully, but load_model usually builds it
-            "total_parameters": int(predictor.model.count_params()),
-            "expected_features": {
-                "sequence_length": 30,
-                "n_features": 15,
-                "features_name": [
-                    'Gold_LogRet', 'USD_LogRet', 'Ounce_LogRet', 'Oil_LogRet',
-                    'SMA_7', 'RSI_14', 'MACD', 'MACD_Signal',
-                    'Bollinger_Upper', 'Bollinger_Lower',
-                    'Gold_LogRet_Lag_1', 'Gold_LogRet_Lag_2', 'Gold_LogRet_Lag_3',
-                    'USD_LogRet_Lag_1', 'USD_LogRet_Lag_2'
-                ]
-            }
+def get_model_info(_: None = Depends(require_api_key)):
+    """Artifact metadata and the committed metrics, both read from disk."""
+    bundle = _require_bundle()
+    results = state["results"]
+    eval_v2 = results.get("eval_V2") or {}
+    backtest = results.get("backtest") or {}
+
+    evaluation = None
+    if eval_v2:
+        evaluation = {
+            "source": _rel(PRIMARY_RESULTS),
+            "variant": eval_v2.get("metadata", {}).get("variant"),
+            "walkforward": _metric_summary(eval_v2.get("walkforward", {})),
+            "holdout": _metric_summary(eval_v2.get("holdout", {})),
+            "edge_verdict": eval_v2.get("edge_verdict"),
         }
 
-        return model_summary
-    
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get model info: {e}"
-        )
-
-
-# Exception handlers
-@app.exception_handler(ValueError)
-async def value_error_handler(request: Request, exc: ValueError):
-    return JSONResponse(
-        status_code=400,
-        content={"success": False, "error": "Invalid Input", "detail": str(exc)}
-    )
-
-def _resolve_predictor(http_request: Request):
-    router = model_artifacts.get("prediction_router")
-    if router is None:
-        return model_artifacts.get("predictor"), {
-            "variant": "production",
-            "model_version": None,
-            "model_path": None,
+    economic = None
+    if backtest:
+        economic = {
+            "source": _rel(BACKTEST_RESULTS),
+            "verdict": backtest.get("verdict"),
+            "costs": backtest.get("metadata", {}).get("costs"),
+            "period": backtest.get("metadata", {}).get("period"),
         }
-    routing_key = client_key(http_request)
-    return router.resolve(routing_key=routing_key)
-
-
-def _health_checks(audit_store: Optional[AuditStore], model_ready: bool) -> Dict[str, Any]:
-    base_path = Path(__file__).resolve().parent.parent.parent
-    model_path = base_path / "models" / "gold_lstm_v2.keras"
-    disk = shutil.disk_usage(str(base_path))
-    disk_free_gb = round(disk.free / (1024**3), 2)
-    disk_min_gb = float(os.getenv("HEALTH_DISK_MIN_FREE_GB", "1.0"))
-    disk_ok = disk_free_gb >= disk_min_gb
-
-    memory_max_mb = float(os.getenv("HEALTH_MEMORY_MAX_MB", "4096"))
-    rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    rss_mb = round(rss_kb / 1024.0, 2)
-    memory_ok = rss_mb <= memory_max_mb
-
-    freshness_hours = None
-    model_fresh = False
-    max_model_age_hours = float(os.getenv("MODEL_MAX_AGE_HOURS", "720"))
-    if model_path.exists():
-        age_seconds = max(0.0, time.time() - model_path.stat().st_mtime)
-        freshness_hours = round(age_seconds / 3600.0, 2)
-        model_fresh = freshness_hours <= max_model_age_hours
-
-    audit_ok = audit_store.ping() if audit_store else False
 
     return {
-        "auth_required": AUTH_REQUIRED,
-        "disk_free_gb": disk_free_gb,
-        "disk_ok": disk_ok,
-        "memory_rss_mb": rss_mb,
-        "memory_ok": memory_ok,
-        "model_freshness_hours": freshness_hours,
-        "model_fresh": model_fresh if model_ready else False,
-        "audit_store_ok": audit_ok,
+        "model_id": bundle.model_id,
+        "metadata": bundle.metadata,
+        "metadata_source": _rel(bundle.metadata_path),
+        "input_contract": {
+            "method": "POST /predict",
+            "body": {"rows": "list of daily rows, oldest first"},
+            "required_columns": RAW_PRICE_COLUMNS,
+            "units": {
+                "Gold_IRR": "Rial per gram, 18k (geram18)",
+                "USD_IRR": "Rial per USD",
+                "Ounce_USD": "USD per ounce",
+                "Oil_USD": "USD per barrel",
+            },
+            "min_rows": MIN_HISTORY_ROWS,
+            "max_rows": MAX_HISTORY_ROWS,
+            "sequence_length": bundle.sequence_length,
+            "n_features": bundle.n_features,
+            "feature_columns": bundle.feature_columns,
+            "target": "next_trading_day_log_return",
+        },
+        "evaluation": evaluation,
+        "economic": economic,
+        "results_error": state["results_error"],
+        "statement": STATEMENT,
     }
 
 
-def _log_prediction_audit(
-    *,
-    endpoint: str,
-    request: Request,
-    result: Optional[Dict[str, Any]],
-    latency_seconds: Optional[float],
-    success: bool,
-    error_text: Optional[str] = None,
-) -> None:
-    audit_store = mlops_artifacts.get("audit_store")
-    if audit_store is None:
-        return
+@app.post("/predict")
+def predict(request: PredictRequest, _: None = Depends(require_api_key)):
+    """
+    Predict the next trading day's log return from recent raw daily rows.
 
-    integration = mlops_artifacts.get("integration")
-    model_version = None
-    if integration is not None and result:
-        routing = result.get("routing") if isinstance(result, dict) else None
-        if routing and routing.get("model_version") is not None:
-            model_version = routing.get("model_version")
-        else:
-            production = integration.pipeline.registry.get_current_production_model()
-            if production:
-                model_version = production.get("version")
+    Synchronous on purpose: FastAPI runs plain ``def`` endpoints in its
+    threadpool, so the blocking Keras call never sits on the event loop.
+    """
+    bundle = _require_bundle()
 
-    predicted_price = None
-    confidence_lower = None
-    confidence_upper = None
-    current_price = None
-    if result:
-        predicted_price = result.get("predicted_price")
-        current_price = result.get("current_price")
-        ci = result.get("confidence_interval_95")
-        if isinstance(ci, dict):
-            confidence_lower = ci.get("lower")
-            confidence_upper = ci.get("upper")
+    frame = pd.DataFrame([
+        {
+            "Date": row.date,
+            "Gold_IRR": row.Gold_IRR,
+            "USD_IRR": row.USD_IRR,
+            "Ounce_USD": row.Ounce_USD,
+            "Oil_USD": row.Oil_USD,
+        }
+        for row in request.rows
+    ])
 
     try:
-        audit_store.log_prediction(
-            endpoint=endpoint,
-            client_ip=request.client.host if request.client else None,
-            model_version=model_version,
-            current_price=current_price,
-            predicted_price=predicted_price,
-            confidence_lower=confidence_lower,
-            confidence_upper=confidence_upper,
-            latency_ms=(latency_seconds * 1000.0) if latency_seconds is not None else None,
-            success=success,
-            error_text=error_text,
+        model_input = prepare_model_input(frame, seq_len=bundle.sequence_length)
+    except InputError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+
+    log_return = bundle.predict_log_return(model_input.X)
+    simple_return = float(np.expm1(log_return))
+
+    warnings: List[str] = []
+    age_days = (datetime.now(timezone.utc).date() - model_input.last_date.date()).days
+    if age_days > STALE_AFTER_DAYS:
+        warnings.append(
+            f"stale_input: last date {model_input.last_date.date()} is {age_days} "
+            f"days old (limit {STALE_AFTER_DAYS})"
         )
-    except Exception as exc:
-        logger.warning("Failed to persist prediction audit log: %s", exc)
+
+    return {
+        "prediction": {
+            "target": "next_trading_day_log_return",
+            "log_return": log_return,
+            "simple_return": simple_return,
+            "persistence_log_return": 0.0,
+            "implied_next_price_persistence_equivalent": float(
+                model_input.last_close * np.exp(log_return)
+            ),
+        },
+        "model": bundle.metadata,
+        "model_metadata_source": _rel(bundle.metadata_path),
+        "input": {
+            "last_date": str(model_input.last_date.date()),
+            "rows_used": model_input.n_rows_input,
+            "feature_rows": model_input.n_feature_rows,
+            "sequence_length": bundle.sequence_length,
+            "last_close_irr": model_input.last_close,
+        },
+        "warnings": warnings,
+        "caveats": CAVEATS,
+        "statement": STATEMENT,
+        "timestamp": datetime.now().isoformat(),
+    }
 
 
 if __name__ == "__main__":
     import uvicorn
-    # Use reload=True for development
+
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

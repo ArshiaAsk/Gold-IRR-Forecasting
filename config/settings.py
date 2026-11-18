@@ -3,6 +3,7 @@ Configuration settings for Gold Price LSTM Prediction
 """
 import os
 from dataclasses import dataclass
+from datetime import date
 from typing import List, Tuple
 
 
@@ -53,6 +54,14 @@ class DataConfig:
     VAL_SPLIT_RATIO: float = 0.15
     RANDOM_STATE: int = 42
     
+    # TGJU date correction (decision D19, docs/DATA_INTEGRITY.md §13.1 and "Stage 1b").
+    # The source dates this contiguous block one day early. The correction relabels
+    # the date column only; no price is modified and no raw file is rewritten.
+    DATE_SHIFT_ENABLED: bool = True
+    DATE_SHIFT_WINDOW_START: date = date(2023, 10, 27)
+    DATE_SHIFT_WINDOW_END: date = date(2025, 8, 6)
+    DATE_SHIFT_DAYS: int = 1
+
     # Feature columns
     FEATURE_COLUMNS: List[str] = None
     TARGET_COLUMN: str = 'Target_Next_LogRet'
@@ -100,11 +109,7 @@ class ModelConfig:
     
     # Sequence settings
     SEQUENCE_LENGTH: int = 30  # LSTM input timesteps
-    
-    def get_optimizer_config(self) -> dict:
-        """Return optimizer configuration"""
-        return {'learning_rate': self.LEARNING_RATE}
-    
+
     def get_early_stopping_config(self) -> dict:
         """Return early stopping configuration"""
         return {
@@ -125,22 +130,12 @@ class ModelConfig:
         }
 
 
-@dataclass
-class TradingConfig:
-    """Trading strategy configurations"""
-    TRANSACTION_FEE: float = 0.002
-    BUY_THRESHOLD: float = 0.0005
-    SELL_THRESHOLD: float = -0.0005
-    INITIAL_CAPITAL: float = 100_000_000
-
-
 class Config:
     """Main configuration class"""
     def __init__(self):
         self.paths = PathConfig()
         self.data = DataConfig()
         self.model = ModelConfig()
-        self.trading = TradingConfig()
 
 
 # Global config instance

@@ -1,76 +1,53 @@
-# Multi-Service ML Stack for Hugging Face Spaces
-# Base: Python 3.10 slim for efficient container size
-FROM python:3.10-slim
+# Single-service image for the FastAPI model server and the Streamlit demo.
+# Default command: the API on 8000. To run the UI from the same image:
+#   docker run --rm -p 8501:8501 gold-irr-honest-forecasting \
+#     streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+#
+# Python 3.12, pinned by tag and digest (linux/amd64 index digest).
+FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
 
-# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive \
-    APP_HOME=/app \
-    MLFLOW_HOME=/mlflow \
-    LOGS_HOME=/logs \
-    DATA_HOME=/data \
-    USER_ID=1000
+    APP_HOME=/app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    git \
-    supervisor \
-    procps \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create application directories with proper permissions for UID 1000
-# Create user with UID 1000 (required by Hugging Face Spaces)
-RUN useradd -m -u ${USER_ID} -s /bin/bash appuser && \
-    mkdir -p ${APP_HOME} ${MLFLOW_HOME} ${LOGS_HOME} ${DATA_HOME} \
-    /var/log/supervisor \
-    && chown -R ${USER_ID}:${USER_ID} ${APP_HOME} ${MLFLOW_HOME} ${LOGS_HOME} ${DATA_HOME} /var/log/supervisor
-
-# Set working directory
 WORKDIR ${APP_HOME}
 
-# Copy and install Python dependencies first (for layer caching)
-COPY --chown=${USER_ID}:${USER_ID} requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# curl is only for the HEALTHCHECK. No build toolchain is needed: the runtime
+# requirements ship manylinux cp312 wheels.
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install additional MLOps dependencies
-RUN pip install --no-cache-dir \
-    supervisor \
-    prometheus-client \
-    mlflow \
-    fastapi \
-    uvicorn[standard] \
-    streamlit \
-    aiofiles \
-    httpx
+COPY requirements.txt ./
+# The retry flags are deliberate: the reference network drops long downloads.
+# They do not change what is installed, only how patiently pip fetches it.
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir --timeout 120 --retries 20 --resume-retries 50 \
+        -r requirements.txt
 
-# Copy application source code
-COPY --chown=${USER_ID}:${USER_ID} . .
+# Non-root runtime user. UID is fixed so volume permissions are predictable.
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p ${APP_HOME}/logs \
+    && chown -R appuser:appuser ${APP_HOME}
 
-# Copy supervisor configuration
-COPY --chown=${USER_ID}:${USER_ID} supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+# Application code and committed artifacts only. No raw data, no tests, no
+# notebooks, and no legacy model files (the stale gold_lstm_v2.keras is excluded).
+COPY --chown=appuser:appuser config/ ./config/
+COPY --chown=appuser:appuser src/ ./src/
+COPY --chown=appuser:appuser models/gold_lstm_stationary_v2.keras ./models/
+COPY --chown=appuser:appuser models/gold_lstm_stationary_v2.metadata.json ./models/
+COPY --chown=appuser:appuser models/scaler_X_stationary_v2.pkl ./models/
+COPY --chown=appuser:appuser models/scaler_y_stationary_v2.pkl ./models/
+COPY --chown=appuser:appuser results/ ./results/
+COPY --chown=appuser:appuser data/sample/ ./data/sample/
+COPY --chown=appuser:appuser streamlit_app.py ./
 
-# Copy startup script
-COPY --chown=${USER_ID}:${USER_ID} start.sh ${APP_HOME}/start.sh
-RUN chmod +x ${APP_HOME}/start.sh
+USER appuser
 
-# Create Streamlit config directory
-RUN mkdir -p /home/user/.streamlit && chown -R ${USER_ID}:${USER_ID} /home/user
+EXPOSE 8000 8501
 
-# Copy Streamlit configuration
-COPY --chown=${USER_ID}:${USER_ID} .streamlit/config.toml /home/user/.streamlit/config.toml
+HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 \
+    CMD curl -fsS http://localhost:8000/health || exit 1
 
-# Switch to non-root user (required by Hugging Face Spaces)
-USER ${USER_ID}
-
-# Expose the primary port (Streamlit UI)
-EXPOSE 7860
-
-# Health check for the main Streamlit service
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:7860/_stcore/health || exit 1
-
-# Entrypoint: Start all services via supervisor
-ENTRYPOINT ["./start.sh"]
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

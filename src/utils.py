@@ -39,5 +39,21 @@ def setup_logger(name="GoldBot"):
 
     return logger
 
-# Create a global logger instance
-logger = setup_logger()
+class _LazyLogger:
+    """Logger proxy that opens its handlers on first use, not at import."""
+
+    def __init__(self) -> None:
+        self._logger = None
+
+    def _resolve(self):
+        if self._logger is None:
+            self._logger = setup_logger()
+        return self._logger
+
+    def __getattr__(self, name):
+        return getattr(self._resolve(), name)
+
+
+# Importing this module must not create a log file; the CLI entry points keep
+# the same file + console behaviour because the first log call resolves it.
+logger = _LazyLogger()

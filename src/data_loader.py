@@ -1,6 +1,4 @@
 import pandas as pd
-import yfinance as yf
-from curl_cffi import requests
 import re
 import os
 import sys
@@ -10,6 +8,54 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import config
 from src.utils import logger
+
+
+def apply_block_date_shift(df, window_start, window_end, days=1, enabled=True):
+    """
+    Relabel TGJU rows whose date falls in the known mis-dated block by ``days``.
+
+    The source dates 2023-10-27 .. 2025-08-06 one day early (see
+    ``docs/DATA_INTEGRITY.md`` §7 and the "Stage 1b" section). This corrects the
+    *date label* only: prices and row count are untouched, and the input frame is
+    not modified. It must be applied per Iranian series *before* the gold/USD
+    merge so both series move together (a partial fix would create lookahead).
+
+    Args:
+        df: Frame with a ``Date`` column (``datetime.date`` or datetime).
+        window_start: First date of the window (inclusive).
+        window_end: Last date of the window (inclusive).
+        days: Number of days to add.
+        enabled: When False the frame is returned unchanged.
+
+    Returns:
+        (out_df, n_rows_shifted)
+
+    Raises:
+        ValueError: if the shift would produce duplicate dates, which would
+            silently corrupt the subsequent merge.
+    """
+    if not enabled or df is None or len(df) == 0:
+        return df, 0
+    if 'Date' not in df.columns:
+        raise ValueError("apply_block_date_shift expects a 'Date' column")
+
+    dates = pd.to_datetime(df['Date'])
+    mask = (dates >= pd.Timestamp(window_start)) & (dates <= pd.Timestamp(window_end))
+    n_shifted = int(mask.sum())
+    if n_shifted == 0:
+        return df, 0
+
+    out = df.copy()
+    out.loc[mask, 'Date'] = (dates[mask] + pd.Timedelta(days=days)).dt.date
+
+    collisions = int(out['Date'].duplicated().sum())
+    if collisions:
+        raise ValueError(
+            f"Date shift produced {collisions} duplicate date(s) in window "
+            f"{window_start}..{window_end}; refusing to continue"
+        )
+    return out, n_shifted
+
 
 class DataLoader:
     def __init__(self):
@@ -49,6 +95,10 @@ class DataLoader:
         logger.info(f"Fetching {item_slug} data from TGJU...")
 
         try:
+            # Imported here so the module (and its offline helpers/tests) does not
+            # require the network client stack to be installed.
+            from curl_cffi import requests
+
             # Use impersonate to mimic a real browser and bypass firewall
             session = requests.Session()
             response = session.get(url, headers=headers, impersonate="chrome110")
@@ -72,6 +122,28 @@ class DataLoader:
                     
                     # Standardize Date format
                     final_df['Date'] = pd.to_datetime(final_df['Date_G']).dt.date
+
+                    # Correct the known one-day-early block (D19). Applied here,
+                    # per series, so gold and USD are relabelled atomically before
+                    # the merge. Prices are not touched.
+                    final_df, shifted_rows = apply_block_date_shift(
+                        final_df,
+                        window_start=config.data.DATE_SHIFT_WINDOW_START,
+                        window_end=config.data.DATE_SHIFT_WINDOW_END,
+                        days=config.data.DATE_SHIFT_DAYS,
+                        enabled=config.data.DATE_SHIFT_ENABLED,
+                    )
+                    logger.info(
+                        "Date-shift correction [%s]: enabled=%s window=%s..%s days=%+d "
+                        "rows_relabeled=%d",
+                        item_slug,
+                        config.data.DATE_SHIFT_ENABLED,
+                        config.data.DATE_SHIFT_WINDOW_START,
+                        config.data.DATE_SHIFT_WINDOW_END,
+                        config.data.DATE_SHIFT_DAYS,
+                        shifted_rows,
+                    )
+
                     final_df = final_df.drop(columns=['Date_G'])
                     
                     # Rename price column based on item type
@@ -96,6 +168,9 @@ class DataLoader:
         """
         logger.info("Fetching global data from Yahoo Finance...")
         try:
+            # Imported here so the module stays importable without the network stack.
+            import yfinance as yf
+
             # Global Gold (Ounce)
             gold = yf.Ticker("GC=F")
             df_gold = gold.history(period="5y")[['Close']].rename(columns={'Close': 'Ounce_USD'}).reset_index()

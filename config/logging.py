@@ -12,7 +12,7 @@ def setup_logging(
     max_bytes: int = 5 * 1024 * 1024,
     backup_count: int = 5,
 ) -> None:
-    """Configure console + rotating file handlers for API/MLOps/training logs."""
+    """Configure console + rotating file handlers for the API and training runs."""
     if isinstance(level, str):
         log_level = logging._nameToLevel.get(level.upper(), logging.INFO)
     else:
@@ -38,12 +38,6 @@ def setup_logging(
     api_file.setLevel(log_level)
     api_file.setFormatter(fmt)
 
-    mlops_file = RotatingFileHandler(
-        os.path.join(base_log_dir, "mlops.log"), maxBytes=max_bytes, backupCount=backup_count
-    )
-    mlops_file.setLevel(log_level)
-    mlops_file.setFormatter(fmt)
-
     training_file = RotatingFileHandler(
         os.path.join(base_log_dir, "training.log"), maxBytes=max_bytes, backupCount=backup_count
     )
@@ -52,9 +46,6 @@ def setup_logging(
 
     root.addHandler(console)
     root.addHandler(api_file)
-
-    logging.getLogger("src.mlops").addHandler(mlops_file)
-    logging.getLogger("src.mlops").propagate = True
 
     logging.getLogger("src.train_pipeline").addHandler(training_file)
     logging.getLogger("src.train_pipeline").propagate = True

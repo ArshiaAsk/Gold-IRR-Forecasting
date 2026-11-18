@@ -1,0 +1,10 @@
+2026-11-16 10:53:04,606 | INFO | Stage 4 backtest start; git=9b9caca; protocol=docs/BACKTEST_PROTOCOL.md
+2026-11-16 10:53:12,783 | INFO | Hold-out 2025-10-01..2026-06-11, n=210, traded through 2026-06-13; mu_train=0.001561
+2026-11-16 10:53:12,783 | INFO | C0: total S0=0.5789 S2=0.1237 S3=0.5212; long S2=0.338 S3=0.590
+2026-11-16 10:53:12,783 | INFO | C1: total S0=0.5734 S2=0.0699 S3=0.4483; long S2=0.338 S3=0.590
+2026-11-16 10:53:12,783 | INFO | C2: total S0=0.5671 S2=0.0113 S3=0.3690; long S2=0.338 S3=0.590
+2026-11-16 10:53:12,783 | INFO | C3: total S0=0.5552 S2=-0.0906 S3=0.2311; long S2=0.338 S3=0.590
+2026-11-16 10:53:12,783 | INFO | Verdict S2: diff=-0.002245 CI=[-0.004545, -0.000789] adds_value=False
+2026-11-16 10:53:12,783 | INFO | Verdict S3: diff=-0.000756 CI=[-0.002396, 0.000201] adds_value=False
+2026-11-16 10:53:12,783 | INFO | Finding: no added value over buy-and-hold
+2026-11-16 10:53:12,783 | INFO | Wrote <REPO>/results/backtest.json
