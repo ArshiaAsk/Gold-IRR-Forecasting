@@ -388,3 +388,24 @@ The conclusion was re-checked against the corrected number, not assumed: 0.69% i
 the only channel is epoch selection, and the hold-out inputs are unchanged (R² +0.000119,
 DM p = 0.4984, 95% CI [−0.0577, +0.0630]). The direction of any effect is optimistic for the
 model by construction, not by measurement.
+
+### E-2 — global series forward-filled onto the Iranian grid (2026-11-18)
+
+§2.3 describes the global construction but does not state how much of the daily global variation
+is lost or aggregated by the join. Measured on the full training frame
+(`python scripts/global_grid_audit.py`, `docs/GLOBAL_GRID_AUDIT.md`):
+
+| Variant | comparable rows | exactly zero (ffill) | span > 1 global day |
+|---|---:|---:|---:|
+| V1 | 1,363 | 488 (35.80%) | 260 (19.08%) |
+| V2 | 1,363 | 491 (36.02%) | 258 (18.93%) |
+| V3 | 858 | 309 (36.01%) | 163 (19.00%) |
+
+The cause is the grid mismatch: the price frame has one row per Iranian date (Sat-Thu), the
+Yahoo series trades Mon-Fri, and `iran.join(global, how="left").ffill()` picks up a Friday bar
+only when Friday is an Iranian row. About 36% of the global returns are therefore exactly zero
+by construction, and about 19% aggregate more than one global session. The bundled sample shows
+the same zero share (36.18% ounce, 36.68% oil).
+
+The effect on any reported metric was **not measured**. No sensitivity run was performed; it is
+future work. This entry records the mechanism and its size, and makes no claim about direction.
