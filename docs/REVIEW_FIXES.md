@@ -11,8 +11,8 @@ byte-identical.
 | 1 | Sample vintage (must-fix 1) | Investigate the committed artifact's training vintage; record the cause in this file; state the sample source, date, rows and hashes in `data/sample/README.md`; add `docs/DATA_MANIFEST.md` (hashes and row counts only); pin the sample SHA-256 in a test; qualify the README "bit-identical" sentence | `sha256sum data/sample/gold_sample.csv`; `python -m pytest tests/test_sample_manifest.py -q`; `git diff --exit-code results/` |
 | 2 | Alignment script (must-fix 2) | Commit `scripts/align_gold_ounce.py` with `--data` and `--live`; reproduce the four B2.2 correlations; replace every temporary-directory path reference in the docs | `python scripts/align_gold_ounce.py --live` (network); `grep -rn "tmp/s1\\|tmp/s1b\\|pytest-scratch" docs/ README.md --exclude=REVIEW_FIXES.md` (no output) |
 | 3 | Wording (must-fix 4, 5 and should-fix) | Fix "no shorting except S3", "touched once", the Streamlit header, the "87 tests" count, the RESULTS/PLAN status headers, and the sample-README "not enough to evaluate" sentence | `grep -n "no shorting except\|touched once\|scored once\|87 tests\|not.*enough to train or evaluate" README.md docs/RESULTS.md streamlit_app.py data/sample/README.md` (no stale hits); `python scripts/check_readme_numbers.py` |
-| 4 | D-1 share | Recompute the share from the artifact's validation predictions; state the denominator for 0.4982% and 0.86%; correct README; append an Errata entry to `docs/EVAL_PROTOCOL.md`; re-check the verdict | `python -m pytest tests/test_d1_share.py -q`; `grep -n "0.69\|0.4982\|0.86" README.md docs/EVAL_PROTOCOL.md` |
-| 5 | Global-grid disclosure | Add `scripts/global_grid_audit.py` (read-only, no model runs); commit `docs/GLOBAL_GRID_AUDIT.md`; add the measured shares to README Limitations and the EVAL_PROTOCOL Errata; state that the effect is unmeasured and the sensitivity run is future work | `python scripts/global_grid_audit.py --check docs/GLOBAL_GRID_AUDIT.md` |
+| 4 | D-1 share | Recompute the share from the artifact's validation predictions; state the denominator for 0.4982% and 0.86%; correct README; append an Errata entry to `docs/EVAL_PROTOCOL.md`; re-check the verdict | `python scripts/d1_share.py`; `grep -n "0.69\|0.4982\|0.86" README.md docs/EVAL_PROTOCOL.md` |
+| 5 | Global-grid disclosure | Add `scripts/global_grid_audit.py` (read-only, no model runs); commit `docs/GLOBAL_GRID_AUDIT.md`; add the measured shares to README Limitations and the EVAL_PROTOCOL Errata; state that the effect is unmeasured and the sensitivity run is future work | `python scripts/global_grid_audit.py` (compare with `docs/GLOBAL_GRID_AUDIT.md`) |
 | 6 | Pre-registration timing | Add one factual README Limitations sentence with the commit and first-fit timestamps and the reason for the amendment | `grep -n "18:02:01\|18:03:57" README.md`; `git log -1 --format=%cI cb75162`; `head -1 results/run.log` |
 | 7 | Cleanup (nice-to-have) | Delete `TradingConfig` and other dead config; the unused pytest fixture; the stale mlflow/onnx/trading_bot ignore rules; the outdated "API/MLOps/training logs" docstring; make `src/utils.py` lazy; grep for removed components | `grep -rn "TradingConfig\|mock_prediction\|mlflow\|onnx\|trading_bot" --include='*.py' --include='*.md' --include='.gitignore' .` (only historical records); `python -m pytest -q` |
 | 8 | Verify | Rebuild and run the Docker image; capture `/health`, a sample `/predict` with the CSV headers, and a 401; run `make check`; update `docs/README_CLAIMS.md` and `docs/STATE.md` | `make check`; `docker build -t gold-irr-honest-forecasting .`; `curl` commands in `docs/STATE.md` |
@@ -77,3 +77,26 @@ present). The README now qualifies the "bit-identical" sentence: it holds for th
 sample as shipped, and refreshing the ounce column changes the prediction to −0.0004350765.
 The model artifact was **not** regenerated.
 
+
+## D-1 recomputation
+
+`scripts/d1_share.py` loads the committed seed-42 artifact and scalers, rebuilds the V2
+validation sequences and runs one inference pass over the 173 rows. It writes nothing.
+
+| Quantity | Formula | Value |
+|---|---|---:|
+| zero-prediction approximation (the 0.4982% figure) | `label² / Σy²` | 0.4982% |
+| reviewer's "0.86" | `label² / mean(y²)` = `173 · label² / Σy²` | 86.19% |
+| exact share of validation loss | `(y − ŷ)² / Σ(y − ŷ)²` | **0.6912%** |
+
+The 0.4982% came from `label² / Σy²` over the 173 validation targets; the 0.86 figure is
+`label² / mean(y²)`, which is 173× larger because the mean divides by 173. The reviewer's written
+formula `label² / (173 · mean(y²))` is algebraically the first row (0.4982%); the "0.86" is
+`label² / mean(y²)` with the 173 dropped, i.e. 0.8619 as a fraction (86.19%), not 0.86% of the
+loss. The correct share is the third row, because early stopping minimises
+`val_loss = (1/173) Σ(y − ŷ)²` and the label is one of the 173 terms.
+
+The conclusion was re-checked, not assumed: 0.69% is still small, the only channel is epoch
+selection, and the hold-out inputs are unchanged (R² +0.000119, DM p = 0.4984, 95% CI
+[−0.0577, +0.0630]). This is the seed-42 share; the Stage 3 five-seed fits used the same label,
+but their per-seed validation losses were not saved, so their exact shares are not recoverable.

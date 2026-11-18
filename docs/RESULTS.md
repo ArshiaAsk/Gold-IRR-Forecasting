@@ -149,12 +149,14 @@ indistinguishable from zero, not a usable edge.
 
 **One-label caveat (found 2026-11-16, not fixed).** The stationary LSTM's early-stopping
 validation tail ends on 2025-09-30, and its target is the 2025-10-01 return — the first return
-of the hold-out period. That is 1 of 173 validation labels (+2.15% log, about 0.50% of the
-validation MSE about zero), used only for epoch selection. No hold-out feature row is in the
+of the hold-out period. That is 1 of 173 validation labels (+2.15% log), **0.69% of the
+validation loss** with the artifact's predictions (the earlier 0.50% was `label² / Σy²`, a
+zero-prediction approximation), used only for epoch selection. No hold-out feature row is in the
 fitting or validation rows, and the scalers are fit only through 2024-12-31. The same overlap
 applies to the seed-42 artifact used in Stage 4, so it affects the Stage 3 headline numbers and
-the backtest alike. The direction, if any, favors the model slightly; it cannot change the
-verdict. Full record: `docs/EVAL_PROTOCOL.md` §11 D-1.
+the backtest alike. The direction, if any, is optimistic for the model; at 0.69% it cannot
+change the verdict. Full record: `docs/EVAL_PROTOCOL.md` §11 D-1 and the Errata at the end of
+that file.
 
 ### 2.3 Per-fold stability (V2, stationary LSTM and ridge-full)
 
@@ -719,9 +721,10 @@ negative and its CI includes zero. Neither passes.
 
 - The Stage 3 stationary LSTM hold-out headline and the seed-42 artifact both used an
   early-stopping validation tail whose last label is the 2025-10-01 return (1 of 173 labels,
-  +2.15%, about 0.50% of validation MSE). No hold-out feature row is in fitting or validation,
-  and the scalers are fit only through 2024-12-31. The overlap can only favor the model
-  slightly; it cannot change the verdict. Full record: `docs/EVAL_PROTOCOL.md` §11 D-1.
+  +2.15%, **0.69% of validation loss** with the artifact's predictions; 0.50% was
+  `label² / Σy²`). No hold-out feature row is in fitting or validation, and the scalers are fit
+  only through 2024-12-31. The overlap can only be optimistic for the model; at 0.69% it cannot
+  change the verdict. Full record: `docs/EVAL_PROTOCOL.md` §11 D-1 and the Errata.
 - **Touch count:** Stage 3 scored the hold-out three times (V1/V2/V3) and the artifact code
   predicted it once without scoring. Stage 4 added two inference-only passes (a development run
   and the final run, identical outputs). Total **six prediction passes, three scored**, none

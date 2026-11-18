@@ -313,9 +313,15 @@ are undocumented and may break without notice.
   No scored pass was re-run after seeing its result, but the literal "touched once" was not met.
 * **One validation label is a hold-out return.** The last validation row (2025-09-30) has the
   2025-10-01 return as its target, so one hold-out-period label entered early stopping. It is
-  1 of 173 validation labels and about 0.50% of validation MSE. No hold-out feature row was in
-  fitting or validation. The direction of this leak **favors the model slightly**, and the
-  verdict is unchanged. It is recorded, not fixed (`docs/EVAL_PROTOCOL.md` §11 D-1).
+  1 of 173 validation labels and **0.69% of the validation loss** — the label's squared error
+  over the sum of squared errors, computed with the artifact's own predictions
+  (`scripts/d1_share.py`). The 0.50% quoted in earlier drafts was `label² / Σy²`, a
+  zero-prediction approximation, not the loss the model minimised; the review's "0.86" was
+  `label² / mean(y²)`, which is 173× the total-loss share and not a share of the loss. No
+  hold-out feature row was in fitting or validation. Any effect on epoch selection is
+  optimistic for the model by construction, but at 0.69% it cannot change the verdict: the
+  hold-out R² is +0.0001, DM p = 0.4984, 95% CI [−0.0577, +0.0630]. It is recorded, not fixed
+  (`docs/EVAL_PROTOCOL.md` §11 D-1 and the Errata at the end of that file).
 * **The hold-out is ~210 rows in a strongly trending nominal series.** Statistical power is
   low, and the results describe this sample, not future performance. A 210-row window cannot
   rule out small effects, and it does not support the large, tradeable effect the old document
