@@ -11,7 +11,7 @@ This file is the contract for Stage 5b. It is committed first; the work below fo
 
 | Topic | Decision |
 |---|---|
-| Primary deliverable | The Docker image. The hosted Streamlit Community Cloud app is best-effort. |
+| Primary deliverable | The Docker image is the only deployment deliverable (D33). |
 | Runtime TF | Measure `tensorflow-cpu` as the runtime dependency. If it serves and installs plausibly within the official limits, use it. If not, stop and ask the owner. |
 | README | English. Title: *Forecasting Iranian Gold (IRR): an end-to-end pipeline and an honest negative result*. |
 | Repo name | `gold-irr-honest-forecasting` — used in docs only; nothing is renamed. |

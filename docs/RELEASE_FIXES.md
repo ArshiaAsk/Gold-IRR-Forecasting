@@ -15,7 +15,7 @@ no merge, no push, no tag.
    by `<REPO>` and nothing else. Proof: masked diff, unchanged line counts, and a digit-only
    checksum equal on both sides. Recorded in `docs/DECISIONS.md` as a narrow exception to
    "do not touch `results/`".
-4. **Hosted-app cleanup.** No reference to a hosted app, Hugging Face or port 7860 remains in
+4. **Deployment cleanup.** No managed-deployment reference or platform port remains in
    tracked files. Docker is the only deployment deliverable (D33).
 5. **Docker.** Rebuild only because files copied into the image changed. Run the image and
    show `/health`, a `/predict` built from the raw sample rows with the CSV's original column

@@ -505,7 +505,7 @@ Keep: `src/data_loader.py` (working scraper), `src/feature_eng.py` (clean featur
 5. **Why the level features?** Was there a reason to feed raw SMA_7/MACD/Bollinger (rather than normalized versions) alongside returns? This is the single largest modeling defect.
 6. **The missing `.agents/` audit:** a prior session's `STATE.md`/`ROADMAP.md` are referenced in memory but absent from this checkout. Were they intentionally deleted, or is this a different working copy?
 7. **MLflow:** the package is missing from the venv and the DBs have 0 runs — was MLflow ever actually exercised, or only scaffolded?
-8. **Deployment target:** the Dockerfile targets Hugging Face Spaces (Streamlit on 7860), while the README documents a 4-service compose stack. Which is the real target?
+8. **Deployment target:** the Dockerfile targets a platform-specific Streamlit port, while the README documents a 4-service compose stack. Which is the real target? *(Vendor name and port redacted in Stage 6 per the owner's release instruction; the finding is unchanged.)*
 
 ---
 

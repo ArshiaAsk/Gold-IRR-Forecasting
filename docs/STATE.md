@@ -124,7 +124,7 @@
 - **Docker** (`361b195`, `9aab948`): single image, Python 3.12 slim bookworm pinned by digest,
   non-root UID 10001, healthcheck on `/health`, API default and Streamlit from the same image.
   No raw data, tests, notebooks or legacy artifacts. Compose keeps one service and documents
-  port/auth/healthcheck. The HF Space port 7860 config is gone.
+  port/auth/healthcheck. The legacy managed-runtime port configuration is gone.
 - **CI** (`eed9ee0`): push/PR workflow, Python 3.12, pip cache, `requirements-dev.txt`,
   `make check`.
 - **Hygiene** (`1cf8285`): MIT `LICENSE` (data excluded), `results/predictions/` ignored,
@@ -170,8 +170,8 @@ Resolved in Stage 5b:
   scalers. The legacy files remain reachable at the tag.
 - `notebooks/` moved to `notebooks/exploratory/`, outputs cleared, a banner added and the
   absolute local path replaced.
-- `.streamlit/config.toml` no longer pins port 7860 or disables CORS/XSRF for the old Hugging
-  Face Space; it carries the theme only.
+- `.streamlit/config.toml` no longer pins a legacy managed-runtime port or disables CORS/XSRF;
+  it carries the theme only.
 
 Untracked local directories (`mlruns/`, `mlflow/`, `logs/`, `data/raw/`, `data/processed/`,
 `data/*.db`) remain on disk and are ignored. They are not part of the repository.
@@ -487,14 +487,9 @@ numbers, all read from the files):
 .venv/bin/streamlit run streamlit_app.py --server.headless true --server.port 8513
 ```
 
-```
-  You can now view your Streamlit app in your browser.
-
-  URL: http://0.0.0.0:7860
-```
-
-It binds the port given on the command line (`HTTP 200` on `:8513`); the printed URL comes
-from `[browser] serverPort = 7860` in `.streamlit/config.toml`.
+It binds the port given on the command line (`HTTP 200` on `:8513`). The printed URL at the
+time came from a `[browser] serverPort` key in `.streamlit/config.toml`; that key has since
+been removed, so the command-line port is authoritative.
 
 `AppTest`:
 
@@ -534,11 +529,10 @@ contains packages unrelated to this repo, e.g. MLflow). TensorFlow 2.20.0 metada
 `yfinance` and `curl_cffi` are listed in `requirements.txt` but are **not installed** in this
 `.venv`; they are imported lazily by `src/data_loader.py`.
 
-**Hosting read.** Assuming Streamlit Community Cloud's documented ~1 GB RAM per app (I could
-not verify this limit from the repository; it is an assumption), 699 MB peak is **plausibly
-within** the limit but with little headroom, and the larger risk is the install: a 1.86 GB
-unpacked TensorFlow plus the rest of the stack. This is a measurement, not a migration plan;
-no framework change was made.
+**Footprint read.** The 699 MB peak was compared with a ~1 GB per-app reference limit (not
+verifiable from the repository; an assumption). It is **plausibly within** that limit but with
+little headroom, and the larger risk is the install: a 1.86 GB unpacked TensorFlow plus the
+rest of the stack. This is a measurement, not a deployment plan; no framework change was made.
 
 > **Superseded in Stage 5b.** The "~1 GB, could not verify" assumption above was replaced by the
 > official limits quoted in *Stage 5b acceptance outputs* §2 (690 MB minimum, 2.7 GB maximum, as
@@ -605,12 +599,11 @@ numbers and are labelled as such:
 apparent; `site-packages` totals **3,085.0 MB** but includes unrelated packages (MLflow). This
 is not a clean runtime total.
 
-**Official Streamlit Community Cloud limits** (docs: `docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app`,
-section "Resource limits", "as of February 2024"): CPU **0.078–2 cores**, memory **690 MB
-minimum, 2.7 GB maximum**, storage **50 GB maximum**. Read: a 686.8 MB peak sits **just under**
-the documented 690 MB floor, with essentially no headroom; the 1.77 GB TensorFlow install is the
-larger practical risk. This supports the GATE 5a decision: Docker primary, hosted Streamlit
-best-effort.
+**Reference managed-runtime limits** (vendor documentation, "Resource limits", as of February
+2024): CPU **0.078–2 cores**, memory **690 MB minimum, 2.7 GB maximum**, storage **50 GB
+maximum**. Read: a 686.8 MB peak sits **just under** the documented 690 MB floor, with
+essentially no headroom; the 1.77 GB TensorFlow install is the larger practical risk. This is
+recorded as a footprint measurement only; Docker is the only deployment deliverable (D33).
 
 ### 3. Docker (the primary deliverable)
 
@@ -728,7 +721,7 @@ $ curl -o /dev/null -w '%{http_code} %{time_total}' localhost:18501/
 200 0.020436
 ```
 
-It prints `Local URL: http://localhost:8501` — the old `7860` came from the removed
+It prints `Local URL: http://localhost:8501` — the legacy configured port came from the removed
 `.streamlit/config.toml` keys and is gone. Both containers were stopped and removed after the
 evidence was captured; the image is left in place.
 
@@ -788,7 +781,6 @@ pipeline code. The counts are measured after the Stage 5b documentation commits.
 
 * `LICENSE`: replace `<TODO: copyright holder>`.
 * `README.md`: author, contact, citation, and the TGJU permission status are marked `TODO`.
-* Decide whether to deploy the best-effort hosted Streamlit app (not built here).
 * The image exists only in this machine's Docker daemon. Push it to a registry if the release
   should ship one; nothing here does that.
 * CI has never executed on GitHub (no remote push). The YAML and every command were replayed
