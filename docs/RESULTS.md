@@ -80,7 +80,8 @@ No raw price level and no calendar dummy.
 ### 1.3 Validation
 
 - **Hold-out:** all rows dated 2025-10-01 or later — 210 feature rows, 2025-10-01 → 2026-06-11.
-  Touched once, after all walk-forward numbers.
+  Scored after all walk-forward numbers within a run; the README Limitations section gives the
+  touch count across the project.
 - **Walk-forward:** five expanding chronological folds; initial 50% training segment; the
   remaining pre-hold-out rows split into five contiguous test blocks; 30-row purge and 5-row
   embargo; scalers fit only on the fitting rows of each fold. The final 15% of each fold's
