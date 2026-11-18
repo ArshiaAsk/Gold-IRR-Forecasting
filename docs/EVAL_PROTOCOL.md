@@ -352,3 +352,39 @@ rows." That promise is violated by **one label** at the hold-out boundary.
   a new artifact and a new hold-out evaluation, which the GATE 3 decision rules out. Stage 4's
   backtest uses the committed seed-42 artifact as-is and records the overlap again in
   `docs/BACKTEST_PROTOCOL.md` and `docs/RESULTS.md`.
+
+---
+
+## Errata (append-only)
+
+Corrections to the pre-registered text above. The body is not rewritten. Each entry states what
+was wrong, the corrected value with its denominator, and the command that reproduces it.
+
+### E-1 — D-1 share of validation loss (2026-11-18)
+
+§11 D-1 says the label's squared value is **0.4982%** of the validation MSE measured about zero.
+That figure is `label² / Σy²`: the share the label would have under a zero prediction. It is not
+the share of the loss the model actually minimised.
+
+| Quantity | Formula (173 validation labels) | Value |
+|---|---|---:|
+| zero-prediction approximation (the 0.4982% figure) | `label² / Σy²` | 0.4982% |
+| reviewer's "0.86" | `label² / mean(y²)` = `173 · label² / Σy²` | 86.19% |
+| exact share of validation loss | `(y − ŷ)² / Σ(y − ŷ)²` | **0.6912%** |
+
+The denominator in the first row is the **sum of squared targets**, `Σy²`; in the second it is
+the **mean squared target**, `mean(y²) = Σy² / 173`, so the ratio is 173 times the first. The
+reviewer's stated formula `label² / (173 · mean(y²))` is algebraically the first row (0.4982%);
+the "0.86" comes from dropping the 173. `0.8619` is a fraction (86.19%), not 0.86% of the loss.
+Neither the first nor the second row is a share of the loss.
+
+Early stopping minimises `val_loss = (1/173) Σ(y − ŷ)²`, so the label's share of that loss is its
+squared error over the total squared error, using the model's predictions: **0.6912%**. This is
+the seed-42 artifact's share (`python scripts/d1_share.py`, one inference pass, no training, no
+hold-out scoring). The Stage 3 five-seed fits used the same label, but their per-seed validation
+losses were not saved, so their exact shares are not recoverable.
+
+The conclusion was re-checked against the corrected number, not assumed: 0.69% is still small,
+the only channel is epoch selection, and the hold-out inputs are unchanged (R² +0.000119,
+DM p = 0.4984, 95% CI [−0.0577, +0.0630]). The direction of any effect is optimistic for the
+model by construction, not by measurement.
