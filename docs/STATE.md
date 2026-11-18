@@ -1026,7 +1026,42 @@ rm -f "$PAYLOAD"
 .venv/bin/python src/feature_eng.py
 ```
 
-`requirements.txt` lists `pytest` for a fresh environment. There is still no `Makefile`
-(`make test` is a Stage 5b deliverable). Data files are **not** in a fresh clone:
-`data/sample/` is, and the full series must be fetched or supplied locally.
+`requirements.txt` lists `pytest` for a fresh environment. A `Makefile` provides `make test`,
+`make check`, `make evaluate`, `make backtest`, `make api` and `make app`. Data files are **not**
+in a fresh clone: `data/sample/` is, and the full series must be fetched or supplied locally.
 
+
+---
+
+## Stage 6 review — final verification (2026-11-18)
+
+**Branch:** `refactor/honest-portfolio` · **HEAD at the start of this block:** `d4d9353`
+**Scope:** the Stage 6 review fixes. No evaluation or backtest run, no retraining, no merge,
+push or tag. `results/` was not written.
+
+### Commands and results
+
+| Check | Command | Result |
+|---|---|---|
+| Test suite (snapshot present) | `make check` | **91 passed, 0 skipped, 91 collected**; README number check: **58 marked numbers match `results/*.json`** |
+| Test suite (clean clone) | `pytest -q` with the two `data/raw/*.csv` files moved aside | **88 passed, 3 skipped**; the skips are `tests/test_serving_parity.py:128`, `tests/test_serving_parity.py:229` and `tests/test_api_contract.py:238` |
+| D-1 share | `python scripts/d1_share.py` | exact **0.691161%**, zero-prediction **0.498226%**, reviewer ratio **0.861932** |
+| Global grid | `python scripts/global_grid_audit.py` | V1 **35.80%** zero / **19.08%** multi-day; V2 **36.02%** / **18.93%**; V3 **36.01%** / **19.00%** |
+| Alignment script | `python scripts/align_gold_ounce.py --live` | the four B2.2 correlations reproduced to four decimals (see `docs/REVIEW_FIXES.md`) |
+| Docker build | `docker build -t gold-irr-honest-forecasting .` | succeeded with the dependency layer cached; image `fb0788de3bd`, **2.99 GB**, 603,728,251 bytes |
+| Docker health | `curl /health` | 200 `{"status":true,"model_loaded":true,...}` |
+| Docker predict | 200 sample rows with the CSV header `Date,Gold_IRR,USD_IRR,Ounce_USD,Oil_USD`, `X-API-Key` | 200, `log_return -0.00045206130016595125`, `rows_used 200`, `feature_rows 141` |
+| Docker auth | the same request without the key | **401** `{"code":"invalid_api_key",...}` |
+| `results/` unchanged | `git diff --exit-code HEAD -- results/`; `git diff --stat 5c2208e^..HEAD -- results/` | no output; empty diff |
+
+### Remaining TODOs for the owner (untouched)
+
+| File:line | Placeholder |
+|---|---|
+| `LICENSE:3` | `Copyright (c) 2026 <TODO: copyright holder>` |
+| `README.md:404` | Author / maintainer |
+| `README.md:405` | Contact |
+| `README.md:406` | How to cite |
+| `README.md:407` | Data permission status (TGJU) |
+
+The verification did not edit any of these.

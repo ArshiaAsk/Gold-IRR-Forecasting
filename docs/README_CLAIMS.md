@@ -1,9 +1,10 @@
 # README claims — source and verification
 
 Every quantitative or status claim in `README.md`, with the committed file it comes from and
-the command or read that verified it. Written for Stage 5b (2026-11-17). The automated check
-covers the 58 marked numbers (`scripts/check_readme_numbers.py`); this table covers the prose,
-the status statements and the numbers that are not in a marked block.
+the command or read that verified it. Written for Stage 5b (2026-11-17); updated for the Stage 6
+review (2026-11-18). The automated check covers the 58 marked numbers
+(`scripts/check_readme_numbers.py`); this table covers the prose, the status statements and the
+numbers that are not in a marked block.
 
 Paths are relative to the repository root. `eval_V2.json` means `results/eval_V2.json`.
 
@@ -23,8 +24,13 @@ Paths are relative to the repository root. `eval_V2.json` means `results/eval_V2
 | Hold-out n = 210, 2025-10-01 .. 2026-06-11 | `eval_V2.json` → `metadata.n_holdout`, `holdout_start/end` | read the JSON |
 | Up-rate 56.3% walk-forward / 51.4% hold-out | `eval_V2.json` → `walkforward.persistence.up_rate`, `holdout.persistence.up_rate` | read the JSON (0.5634 / 0.5143) |
 | The hold-out was predicted six times, three scored | `results/run.log`, `docs/BACKTEST_PROTOCOL.md` §2.4, `docs/DECISIONS.md` D27 | read run.log and D27 |
-| One validation label (2025-09-30 target = 2025-10-01 return) entered early stopping | `docs/EVAL_PROTOCOL.md` §11 D-1, `docs/DECISIONS.md` D28 | read both; `backtest.json` → `metadata.artifact_audit.validation_labels_in_holdout_period: 1` |
-| That overlap is 1 of 173 labels and ~0.50% of validation MSE | `docs/DECISIONS.md` D28 | read D28 |
+| One validation label (2025-09-30 target = 2025-10-01 return) entered early stopping | `docs/EVAL_PROTOCOL.md` §11 D-1 and Errata E-1, `docs/DECISIONS.md` D28 | read both; `backtest.json` → `metadata.artifact_audit.validation_labels_in_holdout_period: 1` |
+| That overlap is 1 of 173 labels and 0.69% of validation loss | `scripts/d1_share.py`; `docs/EVAL_PROTOCOL.md` Errata E-1 | ran the script: exact share 0.691161%, zero-prediction approximation 0.498226%, reviewer ratio 0.861932 |
+| The global series is forward-filled onto the Iranian grid; 36% zero, 19% multi-day | `docs/GLOBAL_GRID_AUDIT.md`; `scripts/global_grid_audit.py` | ran the script; output matches the committed table (V1 35.80%/19.08%, V2 36.02%/18.93%, V3 36.01%/19.00%) |
+| The effect of the global grid on the results was not measured; sensitivity run is future work | `docs/GLOBAL_GRID_AUDIT.md` §"What was not measured"; Errata E-2 | read both; no model run was performed |
+| The hold-out amendment predates the first fit (18:02:01 vs 18:03:57) | `git log -1 --format=%cI cb75162`; `head -1 results/run.log` | ran both; `798981a` pre-registration at 17:59:11 |
+| No shorting anywhere; S3 is long when the prediction is positive | `results/backtest.json` → `strategies.*.S3`; `src/backtest_check.py` | read the strategy code and the JSON; S3 holds gold or cash, never a short |
+| 91 tests collected; 88 pass + 3 skip in a clean clone | `pytest --collect-only`; `tests/test_serving_parity.py`, `tests/test_api_contract.py` skip markers | `make test` → 91 passed with the snapshot; 88 passed, 3 skipped without it |
 | Seed 42 fixed before the run | `src/evaluate.py` `PRIMARY_SEED = 42`; `docs/DECISIONS.md` D27 | read the code and D27 |
 | Seed-42 spread is 9.4% of actual, corr +0.031 | `backtest.json` → `prediction_diagnostics.artifact_seed_42` | `std_pred/std_actual` = 0.09381; corr 0.03125 |
 | `make evaluate` retrains 109 LSTMs and took 1,259.6 s (21.0 min) | `results/run.log`; `docs/STATE.md` Stage 3 | `grep "complete in" results/run.log` → 1259.6 s; count = 108 run fits + 1 artifact fit |
@@ -35,6 +41,7 @@ Paths are relative to the repository root. `eval_V2.json` means `results/eval_V2
 | Legacy tag exists | `git tag -l` | `git rev-parse --short legacy-pre-refactor` |
 | Code is MIT; data excluded | `LICENSE` | read `LICENSE` |
 | Full series not redistributed; 200-row sample | `data/sample/gold_sample.csv`, `data/sample/README.md`, D14 | `len=200`, 2025-10-14 .. 2026-06-13; read the sample README |
+| The sample is the tail of the June-2026 snapshot, not of the training frame's global vintage | `data/sample/README.md`, `docs/DATA_MANIFEST.md`, `docs/REVIEW_FIXES.md` §Sample-vintage | hashes match `DATA_MANIFEST.md`; 188/200 ounce values differ from the refreshed frame; `pytest tests/test_sample_manifest.py` |
 | Block 2023-10-27 .. 2025-08-06: 502 raw rows, 36.1% of the frame | `docs/DATA_INTEGRITY.md` §7 | read §7 (502 raw / 503 modelled; 36.1%) |
 | Jalali field agrees in all 11,331 records | `docs/DATA_INTEGRITY.md` "Stage 1b" | read B1.3 |
 | Block correlation +0.112 → +0.380; outside +0.358 → −0.126 | `docs/DATA_INTEGRITY.md` "Stage 1b" B2.2 | read B2.2 |
@@ -52,8 +59,8 @@ Paths are relative to the repository root. `eval_V2.json` means `results/eval_V2
 | Docker is the only deployment artifact (D33) | `docs/DECISIONS.md` D33 | read D33 |
 | Image is 2.99 GB on disk; the `pip install` layer is 2,240 MB | live build, 2026-11-17 | `docker images`; `docker history` |
 | Build took 4,224.9 s (70.4 min) on the reference machine | live build | `BUILD_SECONDS=4224.88`; `docs/STATE.md` Stage 5b §3 |
-| Stage 6 rebuild took 1 s with the dependency layer cached; size stayed 2.99 GB | live build, 2026-11-18 | `BUILD_SECONDS=1`; `docker images`; `docker image inspect .Size` = 603,727,316 |
-| Container reports healthy; prediction bit-identical to a local run | live run, 2026-11-17 | `docker ps` "healthy"; `-0.00045206130016595125` both ways |
+| Stage 6 rebuild took 1 s with the dependency layer cached; size stayed 2.99 GB | live build, 2026-11-18 | `BUILD_SECONDS=1`; `docker images`; `docker image inspect .Size` = 603,727,316 (the verification rebuild later the same day: `fb0788de3bd`, 603,728,251 bytes, still 2.99 GB) |
+| Container reports healthy; prediction bit-identical to a local run | live run, 2026-11-17 and 2026-11-18 | `docker ps` "healthy"; `-0.00045206130016595125` both ways. The identity holds for the bundled sample as shipped; a refreshed ounce series gives `-0.0004350765375420451` (see `data/sample/README.md`) |
 | Image excludes `data/raw`, `data/processed`, tests, notebooks, `.env` | live image | `ls` inside the container |
 | Non-root UID 10001 | `Dockerfile`; live image | `docker exec id` → `uid=10001(appuser)` |
 | Streamlit runs from the same image on 8501 | live run | `curl` → HTTP 200; logs show port 8501 |
@@ -84,6 +91,10 @@ path for each group.
 | "the rial fell 49.00% against the dollar" | Wrong direction. `backtest.json` gives USD/IRR **+49.00%**; the rial's dollar value fell by `1 − 1/1.49 ≈ 32.9%`. The README now says "USD/IRR rose +49.00%". |
 | Cite `logs/test_metrics.json` for the 0.9717 price R² | `logs/` is gitignored, so a reader could not verify it from a clone. Replaced with the committed `docs/AUDIT_REPORT.md` §2.4, which records the same value and the persistence comparison. |
 | "the model's log-return R² was −0.0016 in the legacy artifact" | Audit-reported only, and the committed legacy metrics file has no log-return R² field. Removed; the README uses this repository's measured Stage 3 numbers instead. |
+| "one validation label is ~0.50% of validation MSE" | The 0.50% was `label² / Σy²`, a zero-prediction approximation. The exact share of the loss the model minimised is 0.6912% (`scripts/d1_share.py`). The README now says 0.69% and names the denominator; the review's "0.86" was `label² / mean(y²)`, not a share of the loss. |
+| "the hold-out was scored once" | Literally false: six prediction passes, three scored. The README states the count and the Streamlit header now says "Hold-out (V2)". |
+| "no shorting except S3" | Wrong: there is no shorting anywhere. S3 holds gold when the prediction is positive and cash otherwise. |
+| "the Docker prediction is bit-identical" without qualification | True only for the bundled sample as shipped. A refreshed global ounce series changes the digits; the README now gives the observed difference (+1.70e-05). |
 | "production-ready" / "deployable" / "profitable" | Not supported by the results and explicitly excluded by the brief. |
 | A live demo URL | No app was deployed. The README describes the Docker image as the only deployment artifact and does not claim a live URL. |
 | A named author, email or citation link | Not supplied. Left as clearly marked `TODO` placeholders. |
