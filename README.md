@@ -322,6 +322,19 @@ are undocumented and may break without notice.
   optimistic for the model by construction, but at 0.69% it cannot change the verdict: the
   hold-out R² is +0.0001, DM p = 0.4984, 95% CI [−0.0577, +0.0630]. It is recorded, not fixed
   (`docs/EVAL_PROTOCOL.md` §11 D-1 and the Errata at the end of that file).
+* **The global series is forward-filled onto the Iranian grid.** The ounce and oil inputs are
+  Yahoo daily bars carried onto the Sat-Thu Iranian dates by a left join and forward-fill.
+  Measured on the full training frame: **36%** of the global returns are exactly zero because of
+  the fill, and **19%** of rows have a return spanning more than one global trading day
+  (`scripts/global_grid_audit.py`, `docs/GLOBAL_GRID_AUDIT.md`). The effect of this construction
+  on the results was **not measured**; a sensitivity run is future work. It is not claimed to
+  help or hurt the model.
+* **The hold-out amendment predates the first fit.** The pre-registered protocol was committed
+  at 2026-11-14 17:59:11 +03:30 (`798981a`); the amendment that set the 2025-10-01 cutoff was
+  committed at 2026-11-14 18:02:01 +03:30 (`cb75162`), 1 min 56 s before the first model fit,
+  which `results/run.log` timestamps at 2026-11-14 18:03:57,480. The reason: the first draft
+  said "the final 180 rows", but a data-shape check showed those begin 2025-11-05, which would
+  skip October; the 2025-10-01 cutoff matches the requested period and gives 210 rows.
 * **The hold-out is ~210 rows in a strongly trending nominal series.** Statistical power is
   low, and the results describe this sample, not future performance. A 210-row window cannot
   rule out small effects, and it does not support the large, tradeable effect the old document

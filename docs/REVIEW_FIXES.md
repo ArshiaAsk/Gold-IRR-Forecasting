@@ -100,3 +100,32 @@ The conclusion was re-checked, not assumed: 0.69% is still small, the only chann
 selection, and the hold-out inputs are unchanged (R² +0.000119, DM p = 0.4984, 95% CI
 [−0.0577, +0.0630]). This is the seed-42 share; the Stage 3 five-seed fits used the same label,
 but their per-seed validation losses were not saved, so their exact shares are not recoverable.
+
+## Global-grid disclosure
+
+`scripts/global_grid_audit.py` rebuilds each variant's price frame with the committed code and
+counts, for consecutive rows inside one segment, how often the later row reuses the earlier
+Yahoo bar (a forward-filled zero return) and how often the two rows use bars more than one
+trading day apart. No model is loaded and nothing is written.
+
+| Variant | comparable | exactly zero (ffill) | span > 1 global day |
+|---|---:|---:|---:|
+| V1 | 1,363 | 488 (35.80%) | 260 (19.08%) |
+| V2 | 1,363 | 491 (36.02%) | 258 (18.93%) |
+| V3 | 858 | 309 (36.01%) | 163 (19.00%) |
+| sample | 199 | 72 (36.18%) ounce, 73 (36.68%) oil | not measurable (different vintage) |
+
+The effect on the results was **not measured**; no sensitivity run was performed. The README
+Limitations bullet and Errata E-2 say so explicitly and make no claim about direction.
+
+## Pre-registration timing
+
+| Event | Timestamp | Source |
+|---|---|---|
+| Pre-registered protocol | 2026-11-14 17:59:11 +03:30 | `git log -1 --format=%cI 798981a` |
+| Hold-out amendment (2025-10-01 cutoff) | 2026-11-14 18:02:01 +03:30 | `git log -1 --format=%cI cb75162` |
+| First model fit | 2026-11-14 18:03:57,480 | `head -1 results/run.log` |
+
+The amendment came 1 min 56 s before the first fit. Reason: the first draft said "the final 180
+rows"; a data-shape check showed those begin 2025-11-05, which would skip October. The
+2025-10-01 cutoff matches the requested period and gives 210 rows.
