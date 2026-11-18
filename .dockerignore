@@ -2,9 +2,11 @@
 .github
 .venv
 venv
-__pycache__
-*.pyc
-*.pyo
+# Bytecode. Docker's patterns are anchored, so a bare "*.pyc" never reaches
+# src/api/*.pyc; the **/ forms do. These .pyc files embed absolute host paths.
+**/__pycache__/
+**/*.pyc
+**/*.pyo
 .pytest_cache
 .coverage
 .mypy_cache
