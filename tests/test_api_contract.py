@@ -22,6 +22,8 @@ FULL_PATH = ROOT / "data" / "raw" / "final_gold_dataset.csv"
 METADATA_PATH = ROOT / "models" / "gold_lstm_stationary_v2.metadata.json"
 RESULTS_PATH = ROOT / "results" / "eval_V2.json"
 TEST_KEY = "stage-5a-test-key"
+# The committed serving output for the full 200-row sample (README, STATE 5a/5b).
+PARITY_LOG_RETURN = -0.00045206130016595125
 
 FORBIDDEN_KEY_PARTS = ("confidence", "interval", "ci_low", "ci_high", "lower_bound", "upper_bound")
 
@@ -38,6 +40,11 @@ def sample_rows() -> list:
         }
         for row in df.itertuples()
     ]
+
+
+def csv_rows() -> list:
+    """The sample exactly as the CSV parses: Date and the four price columns."""
+    return json.loads(pd.read_csv(SAMPLE_PATH).to_json(orient="records"))
 
 
 def walk_keys(obj):
@@ -127,6 +134,43 @@ def test_predict_returns_a_log_return(client, headers):
     assert body["model"]["seed"] == 42
     assert "no demonstrated predictive edge" in body["statement"].lower()
     assert body["caveats"]
+
+
+def test_sample_csv_header_is_accepted_verbatim(client, headers):
+    """Post the CSV rows without renaming anything; the result is the parity value."""
+    rows = csv_rows()
+    assert list(rows[0]) == ["Date", "Gold_IRR", "USD_IRR", "Ounce_USD", "Oil_USD"]
+    response = client.post("/predict", json={"rows": rows}, headers=headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["prediction"]["log_return"] == PARITY_LOG_RETURN
+    assert body["input"]["rows_used"] == len(rows)
+    assert body["input"]["last_date"] == "2026-06-13"
+
+
+def test_lowercase_date_form_still_works(client, headers):
+    """The pre-Stage-6 `date` spelling remains accepted."""
+    response = client.post("/predict", json={"rows": sample_rows()}, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["prediction"]["log_return"] == PARITY_LOG_RETURN
+
+
+def test_conflicting_date_aliases_are_rejected(client, headers):
+    """`date` and `Date` with different values is a 422, not a silent choice."""
+    rows = sample_rows()
+    rows[0]["Date"] = "2099-01-01"
+    response = client.post("/predict", json={"rows": rows}, headers=headers)
+    assert response.status_code == 422, response.text
+    assert "conflicting values for date" in response.text
+
+
+def test_matching_date_aliases_are_accepted(client, headers):
+    """Both aliases with the same value is not a conflict."""
+    rows = sample_rows()
+    rows[0]["Date"] = rows[0]["date"]
+    response = client.post("/predict", json={"rows": rows}, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["prediction"]["log_return"] == PARITY_LOG_RETURN
 
 
 def test_output_has_no_confidence_field(client, headers):

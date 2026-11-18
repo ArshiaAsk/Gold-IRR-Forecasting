@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from config.logging import setup_logging
 from src.api.predictor import ArtifactMissing, ServingBundle, load_bundle
@@ -75,15 +75,45 @@ HOLDOUT_METRIC_KEYS = [
 
 # --- Schemas ---
 
+# The sample CSV header is Date,Gold_IRR,USD_IRR,Ounce_USD,Oil_USD. The JSON
+# contract historically used `date`; both spellings are accepted so a caller can
+# post a CSV row without renaming. The four price fields already have the same
+# name in both forms. A request carrying both date aliases with different values
+# is rejected rather than silently choosing one.
+FIELD_ALIASES = {
+    "date": ("date", "Date"),
+    "Gold_IRR": ("Gold_IRR",),
+    "USD_IRR": ("USD_IRR",),
+    "Ounce_USD": ("Ounce_USD",),
+    "Oil_USD": ("Oil_USD",),
+}
+
 
 class DailyRow(BaseModel):
     """One raw daily observation, in the units of the raw dataset."""
 
-    date: date_type
-    Gold_IRR: float
-    USD_IRR: float
-    Ounce_USD: float
-    Oil_USD: float
+    model_config = ConfigDict(populate_by_name=True)
+
+    date: date_type = Field(validation_alias=AliasChoices(*FIELD_ALIASES["date"]))
+    Gold_IRR: float = Field(validation_alias=AliasChoices(*FIELD_ALIASES["Gold_IRR"]))
+    USD_IRR: float = Field(validation_alias=AliasChoices(*FIELD_ALIASES["USD_IRR"]))
+    Ounce_USD: float = Field(validation_alias=AliasChoices(*FIELD_ALIASES["Ounce_USD"]))
+    Oil_USD: float = Field(validation_alias=AliasChoices(*FIELD_ALIASES["Oil_USD"]))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_conflicting_aliases(cls, data: Any) -> Any:
+        """Accept both date aliases, but not with two different values."""
+        if not isinstance(data, dict):
+            return data
+        for field, aliases in FIELD_ALIASES.items():
+            present = [alias for alias in aliases if alias in data]
+            if len(present) > 1:
+                first = data[present[0]]
+                if any(data[alias] != first for alias in present[1:]):
+                    shown = ", ".join(f"{alias}={data[alias]!r}" for alias in present)
+                    raise ValueError(f"conflicting values for {field}: {shown}")
+        return data
 
 
 class PredictRequest(BaseModel):

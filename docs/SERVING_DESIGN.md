@@ -21,31 +21,38 @@ confidence interval, no trading signal, no live data feed.
 ### 1.1 Body
 
 Recent **raw daily rows**, exactly as they appear in `data/raw/final_gold_dataset.csv`
-(and in the bundled `data/sample/gold_sample.csv`):
+(and in the bundled `data/sample/gold_sample.csv`). The CSV header is
+`Date,Gold_IRR,USD_IRR,Ounce_USD,Oil_USD`, and those names can be posted verbatim:
 
 ```json
 {
   "rows": [
-    {"date": "2026-06-11", "Gold_IRR": 108433000.0, "USD_IRR": 1088900.0,
+    {"Date": "2026-06-11", "Gold_IRR": 108433000.0, "USD_IRR": 1088900.0,
      "Ounce_USD": 4138.7, "Oil_USD": 62.39},
-    {"date": "2026-06-12", "...": "..."}
+    {"Date": "2026-06-12", "...": "..."}
   ]
 }
 ```
 
-| Field | Unit | Meaning |
-|---|---|---|
-| `date` | `YYYY-MM-DD` | Gregorian calendar date of the row |
-| `Gold_IRR` | Rial per gram | 18-karat gold (`geram18`) |
-| `USD_IRR` | Rial per USD | free-market USD (`price_dollar_rl`) |
-| `Ounce_USD` | USD per ounce | `GC=F` close |
-| `Oil_USD` | USD per barrel | `BZ=F` close |
+| Field | Accepted JSON names | Unit | Meaning |
+|---|---|---|---|
+| `date` | `date`, `Date` | `YYYY-MM-DD` | Gregorian calendar date of the row |
+| `Gold_IRR` | `Gold_IRR` | Rial per gram | 18-karat gold (`geram18`) |
+| `USD_IRR` | `USD_IRR` | Rial per USD | free-market USD (`price_dollar_rl`) |
+| `Ounce_USD` | `Ounce_USD` | USD per ounce | `GC=F` close |
+| `Oil_USD` | `Oil_USD` | USD per barrel | `BZ=F` close |
+
+`date` and `Date` are the same field, declared with `pydantic.AliasChoices`. The old
+lowercase form remains valid; the sample CSV header is valid without renaming. The four
+price names are already identical in both forms, so no alias is needed for them. If a row
+supplies both `date` and `Date` with different values, the request is rejected with **422**
+(pydantic schema error) rather than silently choosing one; supplying both with the same
+value is accepted.
 
 The four price columns are the names used by the raw dataset. They are **levels**, not
 features: the caller never sends features, so it cannot send a differently-scaled or
 differently-lagged feature matrix. `src/feature_eng.py::add_stationary_features` computes
-all 23 features inside the service. In the CSV the date column is `Date`; in JSON it is
-`date`.
+all 23 features inside the service.
 
 Dates must be **strictly increasing** (ascending, no duplicates). Order is a hard
 requirement rather than something the service silently sorts, because a silent sort would
@@ -107,7 +114,7 @@ same one:
 | 9 | price ≤ 0 | 422 | `non_positive_price` | `non-positive price in column C at index i` |
 | 10 | implausible daily jump | 422 | `implausible_jump` | `abs log change of C at i is X, above the 0.5 limit` |
 | 11 | window overlaps the mis-dated block | 422 | `block_dates_unsupported` | see §2.2 |
-| 12 | wrong field type / missing field | 422 | `schema` (pydantic) | pydantic's own detail list |
+| 12 | wrong field type / missing field / conflicting `date` aliases | 422 | `schema` (pydantic) | pydantic's own detail list |
 | 13 | model artifacts absent | 503 | `model_not_loaded` | `model artifacts not loaded (status: ...)` |
 
 All semantic errors return `{"detail": {"code": "...", "message": "..."}}`. Pydantic shape
