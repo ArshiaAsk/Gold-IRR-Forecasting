@@ -198,13 +198,20 @@ The author does not know why `SMA_7`, `MACD` and `Bollinger_*` were passed to th
 
 ## D17 — Deployment target: light Streamlit app plus a simple Docker image
 
-**Date:** 2026-11-14 · **Status:** accepted (was O8)
+**Date:** 2026-11-14 · **Status:** superseded by D33 (was O8)
 
-Ship a light Streamlit app and a single simple Docker image. Primary host is Streamlit Community Cloud.
+Ship a light Streamlit app and a single simple Docker image. The Streamlit app is a local UI;
+the Docker image is the deployment artifact.
 
-**Context:** Community Cloud may not be able to reach TGJU. The README's four-service compose stack does not exist; `docker-compose.yml` has one service.
+**Context:** the managed runtime considered here may not be able to reach TGJU. The README's
+four-service compose stack does not exist; `docker-compose.yml` has one service.
 
-**Consequences:** the hosted app must work from the **bundled sample plus the saved model**, with no network dependency at runtime. The fetch script is for local refresh only. The compose file is reduced to what actually exists.
+**Consequences:** the Streamlit app must work from the **bundled sample plus the saved
+model**, with no network dependency at runtime. The fetch script is for local refresh only.
+The compose file is reduced to what actually exists.
+
+**Superseded by D33 (GATE 5b):** the managed deployment path is dropped; Docker is the only
+deployment deliverable.
 
 ---
 
@@ -511,11 +518,11 @@ evaluation-primitive prediction exactly.
 
 The owner accepted Stage 5a and fixed the release framing:
 
-1. **The Docker image is the primary deliverable.** A hosted Streamlit Community Cloud app is
-   best-effort only. `tensorflow-cpu` is measured as the runtime dependency; if it serves the
+1. **The Docker image is the only deployment deliverable (confirmed in D33).**
+   `tensorflow-cpu` is measured as the runtime dependency; if it serves the
    artifact and installs plausibly within the official limits, it is used. If it does not, work
-   stops and the owner is asked before any fallback (the fallback under consideration is a
-   hosted demo from precomputed predictions, clearly labelled; it was not built).
+   stops and the owner is asked before any fallback (a static fallback from precomputed
+   predictions was considered and not built).
 2. **README:** English. Title *Forecasting Iranian Gold (IRR): an end-to-end pipeline and an
    honest negative result*. Suggested repository name `gold-irr-honest-forecasting` is used in
    documentation only; nothing is renamed in this stage.
@@ -568,6 +575,43 @@ and does not retrain or re-score anything.
 
 **Consequence:** the release is reproducible from the committed tree with one test command, a
 pinned image and a README whose numbers cannot silently drift.
+
+---
+
+## D33 — GATE 5b accepted: Docker is the only deployment deliverable
+
+**Date:** 2026-11-18 · **Status:** accepted (owner) · **Closes GATE 5b**
+
+The owner accepted Stage 5b. The managed Streamlit deployment path considered in D17 and D31
+is dropped. **Docker is the only deployment deliverable.** Every README and docs mention that
+suggested a managed demo was planned is removed; the measured footprint numbers stay as a
+documented finding, not as a deployment plan.
+
+The owner will merge `refactor/honest-portfolio` without squashing after the Stage 6 report
+and an independent review, then tag the release. The assistant does not merge, push or tag.
+
+**Consequences:** no managed-app instructions, vendor names or platform ports remain in the
+tracked tree. Stage 6 is limited to small release fixes and does not retrain, re-score or
+change committed numeric results.
+
+---
+
+## D35 — The API accepts the sample CSV header verbatim
+
+**Date:** 2026-11-18 · **Status:** accepted · **Executed in Stage 6**
+
+`POST /predict` declares `date` with `pydantic.AliasChoices("date", "Date")`, so the sample
+CSV header (`Date,Gold_IRR,USD_IRR,Ounce_USD,Oil_USD`) can be posted without renaming. The
+four price names were already identical in both forms. A row that supplies both `date` and
+`Date` with different values is rejected 422; both with the same value is accepted. The
+prediction is unchanged (sample parity value `-0.00045206130016595125`).
+
+**Context:** the CSV header used `Date`, the JSON contract used `date`, and the sample
+prediction script had to rename the column. A caller posting the CSV rows directly got a
+pydantic 422.
+
+**Consequences:** `docs/SERVING_DESIGN.md` §1.1 lists the accepted names; the test suite
+covers the verbatim header, the old lowercase form and the conflict rule.
 
 ---
 
