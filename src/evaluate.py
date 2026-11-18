@@ -345,7 +345,8 @@ def run_variant(variant: str, args, global_df: pd.DataFrame, raw: pd.DataFrame,
         _write_predictions(os.path.join(out_dir, "predictions"), variant,
                            "walkforward", pooled, y_wf)
 
-    # ---------------- Hold-out: touched once, after all walk-forward numbers.
+    # ---------------- Hold-out: scored after all walk-forward numbers within this
+    # run (see README Limitations for the touch count across the project).
     holdout_idx = np.arange(len(pre), len(stat))
     fit_idx, val_idx = split_fit_val(np.arange(len(pre)), purge=PURGE_ROWS)
     y_hold = holdout["Target_Next_LogRet"]
