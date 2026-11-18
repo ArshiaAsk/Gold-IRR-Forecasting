@@ -1,6 +1,6 @@
 # Refactor Plan — Honest Portfolio Piece (B-lite)
 
-**Status:** Stages 0–5b complete; **GATE 5b pending owner review** ·
+**Status:** Stages 0–6 complete; **GATE 6 and the independent review accepted** ·
 **Branch:** `refactor/honest-portfolio` · **Baseline tag:** `legacy-pre-refactor` (→ `d1670cc`)
 **Source of truth for the "before" state:** `docs/AUDIT_REPORT.md` (2026-11-13, read-only audit of `d1670cc`)
 

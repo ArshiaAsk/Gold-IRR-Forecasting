@@ -2,7 +2,9 @@
 
 **Status:** Stage 3 complete; **GATE 3 accepted**, "no demonstrated edge" is final. Stage 4
 "economic reality" complete; **stopped at GATE 4**. `trading_bot/` removed (preserved in
-`legacy-pre-refactor`). No README, API, Streamlit or Dockerfile changes; Stage 5 not started.
+`legacy-pre-refactor`). Stages 5a/5b and 6 are complete on this branch and the Stage 6
+independent review is accepted; no merge, push or tag. This document is the Stage 3/4 record
+and later stages do not rewrite its numbers.
 **Stage 3 protocol:** `docs/EVAL_PROTOCOL.md`, committed at `798981a` **before any model fit**;
 one pre-run hold-out amendment at `cb75162` (see §8), and one post-run deviation found in the
 Stage 4 audit (`docs/EVAL_PROTOCOL.md` §11 D-1, summarized in §2.2 and §11.10).
@@ -22,9 +24,9 @@ wired into the API or Streamlit until Stage 5a).
 **The pre-registered verdict is "no demonstrated edge."**
 
 The primary specification is V2 (corrected dates), stationary features, five expanding
-walk-forward folds and a 2025-10-01 hold-out touched once. The stationary LSTM's point estimate
-is a hair below zero-return persistence in both samples, but it is statistically
-indistinguishable from persistence:
+walk-forward folds and a 2025-10-01 hold-out, predicted six times and scored three times
+(§11.10). The stationary LSTM's point estimate is a hair below zero-return persistence in
+both samples, but it is statistically indistinguishable from persistence:
 
 | V2 stationary LSTM | n | RMSE | Persistence RMSE | OOS R² vs zero | DM p (1-sided) | Bootstrap 95% CI on R² |
 |---|---:|---:|---:|---:|---:|---|

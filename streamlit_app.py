@@ -125,7 +125,7 @@ def tab_findings() -> None:
         if verdict:
             st.info(f"Pre-registered verdict: **{verdict}**.")
         _metrics_table(v2.get("walkforward", {}), "Walk-forward (pooled folds)")
-        _metrics_table(v2.get("holdout", {}), "Hold-out (scored once)")
+        _metrics_table(v2.get("holdout", {}), "Hold-out (V2)")
 
     st.subheader("Sensitivity: V1 / V2 / V3")
     rows = []
@@ -176,7 +176,8 @@ def tab_findings() -> None:
             st.dataframe((df * 100).round(2).rename_axis("cost scenario"))
             st.caption("Total return in percent over the hold-out. "
                        "S0 = buy and hold, S1 = always long after one entry, "
-                       "S2 = long when the model predicts up, S3 = long/short.")
+                       "S2 = long when the prediction exceeds the training mean, "
+                       "S3 = long when the prediction is positive. No strategy shorts.")
         economic_verdict = bt.get("verdict", {})
         if economic_verdict.get("finding"):
             st.info(f"Pre-registered verdict: **{economic_verdict['finding']}**.")

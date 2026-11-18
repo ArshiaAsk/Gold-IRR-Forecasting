@@ -45,7 +45,7 @@ def test_four_tabs(at):
 
 def test_findings_tab_reads_results(at):
     text = all_text(at)
-    assert "Hold-out (scored once)" in text
+    assert "Hold-out (V2)" in text
     assert "Sensitivity: V1 / V2 / V3" in text
     assert "Legacy features vs stationary features" in text
     assert "Economic reality: long/flat strategies" in text

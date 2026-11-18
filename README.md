@@ -46,7 +46,7 @@ the model has no directional skill at all.
 ### Economic reality, hold-out, after costs
 
 A long/flat rule driven by the served seed-42 artifact, 210 trading days, no shorting
-except S3. S0 is buy-and-hold gold in rial; S1 is buy-and-hold USD in rial (the devaluation
+anywhere. S0 is buy-and-hold gold in rial; S1 is buy-and-hold USD in rial (the devaluation
 reference); S2 is long when the prediction exceeds the training mean; S3 is long when the
 prediction is positive.
 
@@ -136,7 +136,7 @@ live demo is provided.
 ```bash
 python -m venv .venv && . .venv/bin/activate
 make install       # runtime + development requirements into .venv
-make test          # full suite: 87 tests
+make test          # full suite: 91 collected (88 pass + 3 skip without the full series)
 make check         # the test suite, then the README-numbers check
 make api           # FastAPI on :8000 (sets API_KEY=demo-key)
 make app           # Streamlit on :8501
@@ -146,6 +146,11 @@ make docker-run    # API on :8000
 
 `make check` is exactly what CI runs: `pytest`, then `scripts/check_readme_numbers.py`, which
 re-reads every number marked in this file from `results/*.json` and fails on drift.
+
+`make test` collects 91 tests. In a clean clone, 88 pass and 3 skip because they need the
+untracked full series (`data/raw/final_gold_dataset.csv`); with that file present, all 91 pass.
+The 3 skips are the full-series feature-parity check, the EMA warm-up check and the block-date
+rejection check.
 
 `make evaluate` re-runs the pre-registered Stage 3 protocol. It retrains 109 LSTMs and took
 1,259.6 s (21.0 min) on the reference machine; it needs the full local dataset, which is not
