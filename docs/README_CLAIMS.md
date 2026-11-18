@@ -44,10 +44,12 @@ Paths are relative to the repository root. `eval_V2.json` means `results/eval_V2
 | 89-row minimum = 59 + 30 | `src/feature_eng.py` `MIN_HISTORY_ROWS`; `docs/SERVING_DESIGN.md` | read the constant and the derivation; API test |
 | API rejects the block with `422 block_dates_unsupported` | `src/feature_eng.py`; live request | ran the API; response captured below |
 | API returns 401 for a wrong key and 422 for 40 rows | `src/api/security.py`, `src/api/main.py` | ran both requests |
-| API response values (`log_return` etc.) | live run against the 200-row sample | captured output below |
+| API accepts the sample CSV header verbatim (`Date`, `Gold_IRR`, `USD_IRR`, `Ounce_USD`, `Oil_USD`) | `src/api/main.py` `FIELD_ALIASES`; `tests/test_api_contract.py` | test posts `csv_rows()` with no renaming and asserts 200 + parity |
+| Conflicting `date` and `Date` values return 422 | `src/api/main.py` `_reject_conflicting_aliases`; `tests/test_api_contract.py` | test supplies both with different values and asserts 422 |
+| API response values (`log_return` etc.) | live run against the 200-row sample, 2026-11-18 | ran the README script; captured output below |
 | No confidence field in the response | `src/api/main.py`; `tests/test_api_contract.py` | test walks every key |
 | No rate limiter, deliberately | `src/api/security.py` module docstring | read the file |
-| Docker is the primary artifact; hosted Streamlit is best-effort | `docs/DECISIONS.md` D31 | read D31 |
+| Docker is the only deployment artifact (D33) | `docs/DECISIONS.md` D33 | read D33 |
 | Image is 2.99 GB on disk; the `pip install` layer is 2,240 MB | live build, 2026-11-17 | `docker images`; `docker history` |
 | Build took 4,224.9 s (70.4 min) on the reference machine | live build | `BUILD_SECONDS=4224.88`; `docs/STATE.md` Stage 5b §3 |
 | Container reports healthy; prediction bit-identical to a local run | live run, 2026-11-17 | `docker ps` "healthy"; `-0.00045206130016595125` both ways |
@@ -82,21 +84,23 @@ path for each group.
 | Cite `logs/test_metrics.json` for the 0.9717 price R² | `logs/` is gitignored, so a reader could not verify it from a clone. Replaced with the committed `docs/AUDIT_REPORT.md` §2.4, which records the same value and the persistence comparison. |
 | "the model's log-return R² was −0.0016 in the legacy artifact" | Audit-reported only, and the committed legacy metrics file has no log-return R² field. Removed; the README uses this repository's measured Stage 3 numbers instead. |
 | "production-ready" / "deployable" / "profitable" | Not supported by the results and explicitly excluded by the brief. |
-| A hosted Streamlit Community Cloud link | No app was deployed. The README describes the Docker image as the primary deliverable and does not claim a live URL. |
+| A live demo URL | No app was deployed. The README describes the Docker image as the only deployment artifact and does not claim a live URL. |
 | A named author, email or citation link | Not supplied. Left as clearly marked `TODO` placeholders. |
 
 ## API evidence captured for the README
 
-Run on 2026-11-17 with `API_KEY=demo-key .venv/bin/python -m uvicorn src.api.main:app --port 8022`:
+Run on 2026-11-18 with `API_KEY=demo-key .venv/bin/python -m uvicorn src.api.main:app --port 8022`:
 
 ```text
 GET /health -> 200 {"status":true,"model_loaded":true,...}
 GET /model-info (key) -> 200, min_rows 89, sequence_length 30, n_features 23
-POST /predict (200 sample rows, key) -> 200, log_return -0.00045206130016595125,
-  last_date 2026-06-13, rows_used 200, feature_rows 141, stale_input warning
+POST /predict (200 sample rows, key, posted with the CSV header Date,...) -> 200,
+  log_return -0.00045206130016595125, last_date 2026-06-13, rows_used 200,
+  feature_rows 141, stale_input warning (158 days)
 POST /predict (40 rows, key) -> 422 {"code":"too_few_rows","message":"need at least 89 rows, got 40"}
 POST /predict (89 block dates, key) -> 422 {"code":"block_dates_unsupported",...}
 GET /model-info (wrong key) -> 401 {"code":"invalid_api_key",...}
 ```
 
-The `/predict` response in the README is this output, trimmed to the fields shown.
+The `/predict` response in the README is this output, trimmed to the fields shown. The
+stale-input day count is a function of the capture date.

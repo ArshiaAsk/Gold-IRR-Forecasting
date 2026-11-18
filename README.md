@@ -128,15 +128,15 @@ notebooks/exploratory/  early sketches; outputs cleared, not the final evaluatio
 ```
 
 Python **3.12**. The runtime needs only `requirements.txt`; development, training and data
-fetching need `requirements-dev.txt`. The Docker image is the primary deployment artifact; a
-hosted Streamlit Community Cloud deployment is best-effort and is not provided here.
+fetching need `requirements-dev.txt`. The Docker image is the only deployment artifact; no
+live demo is provided.
 
 ### Quickstart
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
 make install       # runtime + development requirements into .venv
-make test          # full suite: 83 tests
+make test          # full suite: 87 tests
 make check         # the test suite, then the README-numbers check
 make api           # FastAPI on :8000 (sets API_KEY=demo-key)
 make app           # Streamlit on :8501
@@ -157,7 +157,7 @@ changes its endpoint, and writes to a gitignored directory.
 
 ### Docker
 
-The image is the primary deployment artifact: one Python 3.12 slim image, non-root UID 10001,
+The image is the only deployment artifact: one Python 3.12 slim image, non-root UID 10001,
 `HEALTHCHECK` on `/health`, API on 8000 by default and Streamlit from the same image by
 overriding the command.
 
@@ -186,25 +186,50 @@ function training used. Prices are in **Rial**; `Gold_IRR` is 18-karat gold per 
 in dollars. Set `API_KEY` in the environment; `/health` is open and the other two fail closed
 with 503 when the key is unset. There is no rate limiter, deliberately.
 
+The accepted field names are the sample CSV header verbatim:
+
+| Field | Accepted JSON names | Unit |
+|---|---|---|
+| date | `date`, `Date` | Gregorian date, `YYYY-MM-DD` |
+| Gold_IRR | `Gold_IRR` | Rial per gram, 18k |
+| USD_IRR | `USD_IRR` | Rial per USD |
+| Ounce_USD | `Ounce_USD` | USD per ounce |
+| Oil_USD | `Oil_USD` | USD per barrel |
+
+`date` and `Date` are the same field (`pydantic.AliasChoices`); both spellings are accepted,
+so a row parsed from `data/sample/gold_sample.csv` can be posted without renaming. Supplying
+both with different values is a 422.
+
 `GET /health`:
 
 ```json
-{"status":true,"model_loaded":true,"timestamp":"2026-11-17T14:29:40.140825"}
+{"status":true,"model_loaded":true,"timestamp":"2026-11-18T11:25:58.972087"}
 ```
 
 `GET /model-info` (trimmed) returns the artifact metadata, the input contract and the committed
 metrics. The contract is `min_rows: 89`, `max_rows: 5000`, `sequence_length: 30`,
 `n_features: 23`, target `next_trading_day_log_return`.
 
-`POST /predict` with the 200-row sample:
+`POST /predict` with the 200-row sample, posted exactly as the CSV parses it:
 
 ```bash
-python -c "import json,pandas as pd; d=pd.read_csv('data/sample/gold_sample.csv'); \
-print(json.dumps({'rows':[{'date':str(r.Date),'Gold_IRR':float(r.Gold_IRR),'USD_IRR':float(r.USD_IRR), \
-'Ounce_USD':float(r.Ounce_USD),'Oil_USD':float(r.Oil_USD)} for r in d.itertuples()]}))" > /tmp/rows.json
-curl -sS -X POST localhost:8000/predict -H 'Content-Type: application/json' \
-  -H 'X-API-Key: demo-key' -d @/tmp/rows.json
+.venv/bin/python - <<'PY'
+import json, urllib.request
+import pandas as pd
+
+rows = json.loads(pd.read_csv("data/sample/gold_sample.csv").to_json(orient="records"))
+request = urllib.request.Request(
+    "http://localhost:8000/predict",
+    data=json.dumps({"rows": rows}).encode(),
+    headers={"Content-Type": "application/json", "X-API-Key": "demo-key"},
+)
+with urllib.request.urlopen(request) as response:
+    print(json.dumps(json.load(response), indent=2))
+PY
 ```
+
+Output, captured on 2026-11-18 against a local server (trimmed to the fields shown; the full
+response also carries the model metadata, four caveats and a timestamp):
 
 ```json
 {
@@ -217,10 +242,13 @@ curl -sS -X POST localhost:8000/predict -H 'Content-Type: application/json' \
   },
   "input": {"last_date": "2026-06-13", "rows_used": 200, "feature_rows": 141,
             "sequence_length": 30, "last_close_irr": 172208000.0},
-  "warnings": ["stale_input: last date 2026-06-13 is 157 days old (limit 7)"],
+  "warnings": ["stale_input: last date 2026-06-13 is 158 days old (limit 7)"],
   "statement": "This model has no demonstrated predictive edge: ..."
 }
 ```
+
+The `log_return` is bit-identical to the value in the Docker section and to the committed
+serving output. The stale day count grows with the calendar.
 
 **Why 89 rows minimum.** The longest lookback is the 60-row SMA, which leaves the first feature
 row at index 59; the model needs 30 consecutive feature rows, so 59 + 30 = 89. An 88-row
