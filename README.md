@@ -317,7 +317,8 @@ are undocumented and may break without notice.
   over the sum of squared errors, computed with the artifact's own predictions
   (`scripts/d1_share.py`). The 0.50% quoted in earlier drafts was `label² / Σy²`, a
   zero-prediction approximation, not the loss the model minimised; the review's "0.86" was
-  `label² / mean(y²)`, which is 173× the total-loss share and not a share of the loss. No
+  `label² / mean(y²)`, which is 173× the zero-prediction share (0.4982%) and not a share of the
+  loss. No
   hold-out feature row was in fitting or validation. Any effect on epoch selection is
   optimistic for the model by construction, but at 0.69% it cannot change the verdict: the
   hold-out R² is +0.0001, DM p = 0.4984, 95% CI [−0.0577, +0.0630]. It is recorded, not fixed

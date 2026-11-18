@@ -15,7 +15,7 @@ The three numbers in circulation are:
   validation squared error.
 * ``0.8619`` = label^2 / mean(y^2), i.e. 86.19%.
   The label's squared error relative to the average per-row squared error;
-  this is 173x the total-loss share, not a share of the loss. The review's
+  this is 173x the zero-prediction share, not a share of the loss. The review's
   "0.86" is this ratio (0.86 as a fraction, not 0.86% of the loss).
 * the exact share = (y_label - yhat_label)^2 / sum_i (y_i - yhat_i)^2.
   This is the right measure of influence on early stopping, because
@@ -111,7 +111,7 @@ def main() -> int:
     print(f"zero-prediction approximation:        {zero_approx:.6%}  (label^2 / sum y^2)")
     print(f"reviewer ratio:                       {ratio_to_mean:.6f}  "
           f"(= {ratio_to_mean:.2%} of the mean per-row squared error; "
-          f"{len(y_true)}x the total-loss share)")
+          f"{len(y_true)}x the zero-prediction share)")
     print()
     print("The exact share is the right measure of influence on early stopping:")
     print("val_loss = (1/173) * sum (y - yhat)^2, so the label's share of the mean is")
