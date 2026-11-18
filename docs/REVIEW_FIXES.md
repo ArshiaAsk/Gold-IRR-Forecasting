@@ -129,3 +129,23 @@ Limitations bullet and Errata E-2 say so explicitly and make no claim about dire
 The amendment came 1 min 56 s before the first fit. Reason: the first draft said "the final 180
 rows"; a data-shape check showed those begin 2025-11-05, which would skip October. The
 2025-10-01 cutoff matches the requested period and gives 210 rows.
+
+## Cleanup
+
+* Deleted `TradingConfig` and `config.trading` (zero references), and
+  `ModelConfig.get_optimizer_config` (zero references; its assertion in
+  `tests/test_pipeline.py` was removed with it).
+* Deleted `tests/conftest.py`: it only defined `pytest.mock_prediction`, which no test used.
+* `.gitignore`: removed `*.onnx`, `mlruns/`, `mlflow/`, `mlflow.db` and `trading_bot/outputs/`.
+  The generic `*.db` / `*.sqlite` rules remain under "Local databases".
+* `config/logging.py`: the docstring no longer says "API/MLOps/training logs"; the function is
+  used by the API and by the training logger.
+* `src/utils.py`: the module-level logger is now a lazy proxy. Importing it no longer opens
+  `logs/bot_YYYY-MM-DD.log`; the first log call resolves the same file + console handlers, so
+  the CLI entry points behave as before. Verified: `import src.utils` creates no file;
+  `logger.info(...)` creates one.
+* Grep for removed components (`TradingConfig|config.trading|mock_prediction|mlflow|mlruns|
+  onnx|MLOps|trading_bot`) finds **no code hits**. Remaining hits are historical prose:
+  `README.md:358` (legacy tag), `docs/STATE.md` (stage logs and the audit inventory),
+  `docs/DECISIONS.md` (D3, D26, D31), `docs/RESULTS.md` (the removed bot), and
+  `docs/AUDIT_REPORT.md` (the pre-refactor audit).

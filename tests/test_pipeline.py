@@ -277,10 +277,6 @@ class TestConfiguration(unittest.TestCase):
         self.assertEqual(model_config.LSTM_UNITS_1, 64)
         self.assertEqual(model_config.LEARNING_RATE, 0.001)
         self.assertGreater(model_config.EPOCHS, 0)
-        
-        # Test config methods
-        optimizer_config = model_config.get_optimizer_config()
-        self.assertIn('learning_rate', optimizer_config)
 
 
 def run_tests():

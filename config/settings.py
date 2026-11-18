@@ -109,11 +109,7 @@ class ModelConfig:
     
     # Sequence settings
     SEQUENCE_LENGTH: int = 30  # LSTM input timesteps
-    
-    def get_optimizer_config(self) -> dict:
-        """Return optimizer configuration"""
-        return {'learning_rate': self.LEARNING_RATE}
-    
+
     def get_early_stopping_config(self) -> dict:
         """Return early stopping configuration"""
         return {
@@ -134,22 +130,12 @@ class ModelConfig:
         }
 
 
-@dataclass
-class TradingConfig:
-    """Trading strategy configurations"""
-    TRANSACTION_FEE: float = 0.002
-    BUY_THRESHOLD: float = 0.0005
-    SELL_THRESHOLD: float = -0.0005
-    INITIAL_CAPITAL: float = 100_000_000
-
-
 class Config:
     """Main configuration class"""
     def __init__(self):
         self.paths = PathConfig()
         self.data = DataConfig()
         self.model = ModelConfig()
-        self.trading = TradingConfig()
 
 
 # Global config instance
