@@ -52,6 +52,7 @@ Paths are relative to the repository root. `eval_V2.json` means `results/eval_V2
 | Docker is the only deployment artifact (D33) | `docs/DECISIONS.md` D33 | read D33 |
 | Image is 2.99 GB on disk; the `pip install` layer is 2,240 MB | live build, 2026-11-17 | `docker images`; `docker history` |
 | Build took 4,224.9 s (70.4 min) on the reference machine | live build | `BUILD_SECONDS=4224.88`; `docs/STATE.md` Stage 5b §3 |
+| Stage 6 rebuild took 1 s with the dependency layer cached; size stayed 2.99 GB | live build, 2026-11-18 | `BUILD_SECONDS=1`; `docker images`; `docker image inspect .Size` = 603,727,316 |
 | Container reports healthy; prediction bit-identical to a local run | live run, 2026-11-17 | `docker ps` "healthy"; `-0.00045206130016595125` both ways |
 | Image excludes `data/raw`, `data/processed`, tests, notebooks, `.env` | live image | `ls` inside the container |
 | Non-root UID 10001 | `Dockerfile`; live image | `docker exec id` → `uid=10001(appuser)` |

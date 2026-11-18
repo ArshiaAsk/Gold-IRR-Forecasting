@@ -172,8 +172,11 @@ Measured on the reference machine: the image is **2.99 GB** on disk, of which th
 `pip install` layer is 2,240 MB — almost all of it TensorFlow. The build took **4,224.9 s
 (70.4 min)** because the connection to `files.pythonhosted.org` dropped the 259 MB
 `tensorflow-cpu` wheel; the Dockerfile retries and resumes, so a fast connection should be
-much quicker. The running container reports `healthy` and returns
-`-0.00045206130016595125` for the sample below, bit-identical to the value from a local run.
+much quicker. A Stage 6 rebuild that changed only application files reused the cached
+dependency layer and took **1 s**; the image ID changed and the size stayed **2.99 GB** on
+disk (`docker image inspect` reports 603,727,316 bytes). The running container reports
+`healthy` and returns `-0.00045206130016595125` for the sample below, bit-identical to the
+value from a local run.
 
 The image contains the model, scalers, metadata, `results/` JSON and the 200-row sample. It
 does not contain `data/raw`, `data/processed`, tests, notebooks or `.env`.
