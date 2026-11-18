@@ -149,3 +149,27 @@ rows"; a data-shape check showed those begin 2025-11-05, which would skip Octobe
   `README.md:358` (legacy tag), `docs/STATE.md` (stage logs and the audit inventory),
   `docs/DECISIONS.md` (D3, D26, D31), `docs/RESULTS.md` (the removed bot), and
   `docs/AUDIT_REPORT.md` (the pre-refactor audit).
+
+## Alignment script output
+
+`python scripts/align_gold_ounce.py --live`, run on 2026-11-18:
+
+```text
+Mode: live fetch (TGJU geram18 + Yahoo GC=F)
+Source: live TGJU through 2026-11-17; Yahoo through 2026-11-18
+Candidate rows: 1276 | weekday mix {'Tuesday': 371, 'Wednesday': 366, 'Monday': 339, 'Thursday': 200}
+
+period          n   shift 0  shift +1  check
+pre-block     287   +0.0340   +0.0454
+block         235   +0.1119   +0.3803  reproduced
+post-block    238   +0.3577   -0.1262  reproduced
+
+B2.2 reproduced to four decimals.
+```
+
+The offline `--data` mode uses the committed snapshot, which ends 2026-06-13. It gives block
+n=236, +0.1127/+0.3801 and post-block n=158, +0.3913/−0.1322, so it **does not** reproduce
+B2.2's post-block period (the snapshot is five months shorter). The script says so in its own
+output and `docs/DATA_INTEGRITY.md` §17 records the same; the live mode is the faithful
+reproduction. The script checks the snapshot hashes against `docs/DATA_MANIFEST.md` and is not
+run in CI.
