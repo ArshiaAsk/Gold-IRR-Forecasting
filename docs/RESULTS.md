@@ -431,9 +431,9 @@ prediction at daily frequency**, not a claim that gold/USD/oil information is ne
 # Full protocol (writes results/ and the primary artifact)
 .venv/bin/python -m src.evaluate --variant all --artifact
 
-# Tests (pytest is not installed in .venv; use a scratch environment)
+# Tests (pytest is in requirements-dev.txt; use the project venv)
 PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
-  /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q
+  .venv/bin/python -m pytest tests/ test_pipeline.py -q
 ```
 
 Inputs: the untracked local snapshot `data/raw/final_gold_dataset.csv` and the cached
@@ -731,7 +731,7 @@ negative and its CI includes zero. Neither passes.
 ```bash
 .venv/bin/python -m src.backtest_check
 PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
-  /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q
+  .venv/bin/python -m pytest tests/ test_pipeline.py -q
 ```
 
 Tests: **44 passed** (9 new backtest tests + 35 existing).
@@ -747,7 +747,7 @@ still contains aggregate metrics only, and no result file was re-run or overwrit
 - `python -m src.evaluate ... --save-predictions --out-dir <dir>` additionally writes
   `<dir>/predictions/<variant>_<sample>.csv` with `variant, sample, model, date, y_true, y_pred`.
   It is opt-in, and `results/predictions/` is gitignored.
-- A scratch smoke run (`--variant V2 --seeds 1 --epochs 1 --skip-legacy --out-dir /tmp/s5b-smoke`)
+- A scratch smoke run (`--variant V2 --seeds 1 --epochs 1 --skip-legacy --out-dir <scratch>/s5b-smoke`)
   verified the flag: 2,760 walk-forward rows (5 models × 552) and 1,050 hold-out rows
   (5 × 210). Its model metrics are **not** comparable to the headline: one seed and one epoch
   are a wiring check, not an evaluation.

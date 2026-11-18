@@ -1,7 +1,7 @@
 # Data Integrity Investigation
 
 **Stage:** 1 · **Date:** 2026-11-14 · **Branch:** `refactor/honest-portfolio` · **HEAD at start:** `d061bd7`
-**Scope:** read-only. No source, data or model file was modified. All experiments ran in `/tmp/s1` against copies.
+**Scope:** read-only. No source, data or model file was modified. All experiments ran in a scratch directory against copies. The original scratch paths (now gone) are shown below as `<scratch>/s1` and `<scratch>/s1b`.
 **Source of the "before" state:** `docs/AUDIT_REPORT.md` (2026-11-13, audit of `d1670cc`).
 
 ---
@@ -155,16 +155,18 @@ price_dollar_rl:  rows=4002  OHLC ordering consistent: 3994/4002
 
 99.8% and 99.8%. A permuted mapping would score near 33%. The mapping is correct; the handful of violations are genuine TGJU data glitches.
 
-The cached file covers **`price_dollar_rl` only** — there is no cached gold response. To get the gold series I re-fetched both slugs from the same endpoint into `/tmp/s1` (network was available):
+The cached file covers **`price_dollar_rl` only** — there is no cached gold response. To get the gold series I re-fetched both slugs from the same endpoint into `<scratch>/s1` (network was available):
 
 ```bash
 python - <<'EOF'
-import urllib.request, json
+import os, urllib.request, json
+scratch = os.environ.get("SCRATCH_DIR", "scratch_s1")
+os.makedirs(scratch, exist_ok=True)
 for slug in ["geram18","price_dollar_rl"]:
     url=f"https://api.tgju.org/v1/market/indicator/summary-table-data/{slug}"
     req=urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0',
         'Referer':f'https://www.tgju.org/profile/{slug}/history','Accept':'application/json'})
-    json.dump(json.loads(urllib.request.urlopen(req, timeout=30).read()), open(f"/tmp/s1/{slug}.json","w"))
+    json.dump(json.loads(urllib.request.urlopen(req, timeout=30).read()), open(f"{scratch}/{slug}.json","w"))
 EOF
 ```
 
@@ -461,10 +463,11 @@ Consequence: **473 of 1,424 rows (33%) have an exactly-zero `Ounce_LogRet` and `
 
 ## 9. Impact analysis: shifting the Iranian series
 
-Ran in `/tmp/s1` against a copy. The Iranian columns (`Gold_IRR`, `USD_IRR`) were shifted by `k ∈ {−1, 0, +1}` rows while the global columns were held fixed, then all features were rebuilt exactly as `src/feature_eng.py` does and the same split was applied (`test = 15%`, ridge `alpha=1.0`).
+Ran in a scratch copy. The Iranian columns (`Gold_IRR`, `USD_IRR`) were shifted by `k ∈ {−1, 0, +1}` rows while the global columns were held fixed, then all features were rebuilt exactly as `src/feature_eng.py` does and the same split was applied (`test = 15%`, ridge `alpha=1.0`).
 
 ```bash
-python /tmp/s1/impact.py
+# scratch script, not committed; run from the scratch copy
+python impact.py
 ```
 
 ### 9.1 Correlations
@@ -629,7 +632,7 @@ No contradiction was found in the audit's account of the loader, the merge, the 
 
 ## 16. Deviations from `docs/PLAN.md`
 
-`docs/PLAN.md:48` lists `scripts/audit_calendar.py` as a Stage 1 deliverable. The owner's Stage 1 instruction restricted new files to `docs/DATA_INTEGRITY.md` plus updates to `STATE.md` and `DECISIONS.md`, so **no script was committed**. Every figure above was produced by a command run in this session; the commands are inlined in each section and the scratch scripts live in `/tmp/s1` (`analyze.py`, `impact.py`). If a committed, runnable audit script is wanted, it belongs in Stage 2 with the rest of `scripts/`.
+`docs/PLAN.md:48` lists `scripts/audit_calendar.py` as a Stage 1 deliverable. The owner's Stage 1 instruction restricted new files to `docs/DATA_INTEGRITY.md` plus updates to `STATE.md` and `DECISIONS.md`, so **no script was committed**. Every figure above was produced by a command run in this session; the commands are inlined in each section and the scratch scripts (`analyze.py`, `impact.py`) lived in a temporary directory that no longer exists. If a committed, runnable audit script is wanted, it belongs in Stage 2 with the rest of `scripts/`.
 
 The plan's acceptance criterion `grep -c '^|' docs/DATA_INTEGRITY.md ≥ 8` is satisfied (§11, §13.3, §14 alone exceed it).
 
@@ -649,19 +652,17 @@ All commands assume the repo root and `.venv/bin/python` (Python 3.12.3). Nothin
 # raw response structure
 .venv/bin/python -c "import json; d=json.load(open('api_layer/cache/raw_response_20260207_130227.json')); print(d['url'], len(d['data']['data']), d['data']['data'][0])"
 
-# full analysis (re-fetches both TGJU series and both Yahoo series into /tmp/s1)
-python /tmp/s1/analyze.py
-python /tmp/s1/impact.py
+# full analysis: the scratch scripts are not committed; their output is quoted below
 ```
 
-The scratch scripts are not part of the repository and will not survive a reboot; their output is quoted verbatim in this document.
+The scratch scripts are not part of the repository and no longer exist; their output is quoted verbatim in this document.
 
 ---
 
 # Stage 1b — Independent evidence for the 2023-10-27 → 2025-08-06 block
 
 **Date:** 2026-11-14 · **Branch:** `refactor/honest-portfolio` · **HEAD at start:** `14dec06`
-**Scope:** read-only. No file under `src/`, `data/`, `models/` or `config/` was modified. All experiments ran in `/tmp/s1b` against copies.
+**Scope:** read-only. No file under `src/`, `data/`, `models/` or `config/` was modified. All experiments ran in a scratch directory against copies (`<scratch>/s1b` in the original notes).
 **Trigger:** GATE 1, decision G1 = option (c) — resolve the block with sources that already exist inside the project before choosing fix or document.
 
 Stage 1 established that the block *looks* like a one-day-early label and that a competing explanation (a change in TGJU's publishing schedule rather than its date arithmetic) could not be excluded. This stage tests that directly, with two sources that do not depend on each other: the **Jalali date field** that the loader throws away, and **alignment against the global gold series**.
@@ -680,7 +681,7 @@ Every TGJU record has 8 positional elements. The last two are the Gregorian and 
 
 `src/data_loader.py:70` selects `['Date_G', 'Close']` and discards `Date_J`. Index 7 of the raw row is therefore unused evidence.
 
-The committed cache holds only `price_dollar_rl` (3,775 rows, 2011-11-26 → 2026-02-05) and it **does cover the block**: 502 rows fall in 2023-10-27 → 2025-08-06. It has no gold series. I fetched both series live (network was available) into `/tmp/s1b`; that gives a second vintage nine months newer than the cache, which turns out to be useful.
+The committed cache holds only `price_dollar_rl` (3,775 rows, 2011-11-26 → 2026-02-05) and it **does cover the block**: 502 rows fall in 2023-10-27 → 2025-08-06. It has no gold series. I fetched both series live (network was available) into `<scratch>/s1b`; that gives a second vintage nine months newer than the cache, which turns out to be useful.
 
 ### B1.2 The converter is verified before it is used
 
@@ -710,7 +711,8 @@ Fourteen known dates, including a leap-year Esfand 30 and five Nowruz boundaries
 ### B1.3 Offset distribution, inside vs outside the block
 
 ```bash
-python /tmp/s1b/offsets.py
+# scratch script, not committed
+python offsets.py
 ```
 
 ```
@@ -753,7 +755,7 @@ One consequence is immediate and matters for the decision rule: **the prescribed
 
 ## B2. Source 2 — alignment against the global gold series
 
-Yahoo `GC=F` dates are reliable and independent of TGJU. Scratch copy only, `/tmp/s1b`.
+Yahoo `GC=F` dates are reliable and independent of TGJU. Scratch copy only.
 
 ### B2.1 Design
 
@@ -764,7 +766,7 @@ The clean version fixes the row set: use only Iranian rows that have a Yahoo bar
 ### B2.2 Gold vs ounce, identical row set
 
 ```bash
-python /tmp/s1b/align5.py
+python scripts/align_gold_ounce.py --live
 ```
 
 ```
@@ -782,7 +784,9 @@ python /tmp/s1b/align5.py
 
 This is the shape a date-label defect has to produce. Inside the block, moving the match one day later raises the same-day correlation to **+0.380**, which is the level the *clean* post-block period reaches at shift 0 (**+0.358**). Outside the block, the same operation collapses the correlation to −0.126. The block is not merely "a bit better" at +1 — it is restored to the level the rest of the series shows when correctly aligned.
 
-The naive version, over whatever rows match at each shift (`python /tmp/s1b/naive.py`), agrees:
+**Reproduction status (2026-11-18).** The original scratch script no longer exists. `scripts/align_gold_ounce.py --live` is a reconstruction from the description above. On 2026-11-18 it printed 1,276 candidate rows (the original printed 1,274; two rows differ in the live vintage) and the same period counts 287/235/238, with correlations +0.0340/+0.0454, **+0.1119/+0.3803**, **+0.3577/−0.1262**. The four B2.2 numbers reproduce to four decimals. The offline `--data` mode uses the committed snapshot, which ends 2026-06-13: it gives block n=236, +0.1127/+0.3801 and post-block n=158, +0.3913/−0.1322, so it cannot reproduce the post-block period; the live mode is the faithful one. The script checks the snapshot SHA-256 against `docs/DATA_MANIFEST.md` and is deliberately not run in CI.
+
+The naive version, over whatever rows match at each shift (a scratch check, not committed), agrees:
 
 ```
 naive alignment: whatever rows match at each shift
@@ -925,37 +929,42 @@ No date collisions, no row-count change, no price change, index stays unique. Fo
 
 ## B6. Reproduction
 
-All commands assume `/tmp/s1b` with `.venv/bin/python`. Nothing writes to the repo.
+All commands assume the repo root and `.venv/bin/python`. Nothing writes to the repo.
 
 ```bash
 # raw responses with the Jalali field (network required; cache covers USD only)
-#   -> /tmp/s1b/geram18_live.json, price_dollar_rl_live.json
+#   writes geram18_live.json and price_dollar_rl_live.json to a scratch directory
 python - <<'EOF'
-import urllib.request, json
+import os, urllib.request, json
+scratch = os.environ.get("SCRATCH_DIR", "scratch_s1b")
+os.makedirs(scratch, exist_ok=True)
 for slug in ["geram18","price_dollar_rl"]:
     url=f"https://api.tgju.org/v1/market/indicator/summary-table-data/{slug}"
     req=urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0',
         'Referer':f'https://www.tgju.org/profile/{slug}/history','Accept':'application/json'})
-    json.dump(json.loads(urllib.request.urlopen(req, timeout=30).read()), open(f"/tmp/s1b/{slug}_live.json","w"))
+    json.dump(json.loads(urllib.request.urlopen(req, timeout=30).read()), open(f"{scratch}/{slug}_live.json","w"))
 EOF
 
 # converter validation (known dates + 73,349-day round trip)
-python /tmp/s1b/validate_jalali.py
+python validate_jalali.py          # scratch script, not committed
 
 # offset distribution inside/outside the block (B1.3)
-python /tmp/s1b/offsets.py
+python offsets.py                  # scratch script, not committed
 
-# alignment: identical-row-set test and weekday return profile (B2.2, B2.5)
-python /tmp/s1b/align5.py
+# alignment: identical-row-set test (B2.2)
+python scripts/align_gold_ounce.py --live
 
-# naive version, for contrast with the fixed-row-set test (B2.2)
-python /tmp/s1b/naive.py
-
-# identity dispersion, USD alignment, holiday table, Thursday-by-year (B2.3, B2.4, B2.6)
-python /tmp/s1b/align3.py
+# naive version, identity dispersion, USD alignment, holiday table, Thursday-by-year
+# (B2.3, B2.4, B2.6): scratch scripts, not committed
 ```
 
-The scratch scripts live in `/tmp/s1b` (`jalali.py`, `validate_jalali.py`, `offsets.py`, `align5.py`, `naive.py`, `align3.py`) and will not survive a reboot. Every figure quoted above is produced by one of them; the code blocks are raw output, the weekday and holiday tables restate it. `align2.py` and `align4.py` were superseded intermediate versions and are not needed to reproduce anything.
+The scratch scripts (`jalali.py`, `validate_jalali.py`, `offsets.py`, `align5.py`, `naive.py`,
+`align3.py`) lived in a temporary directory and no longer exist. Every figure quoted above is
+produced by one of them; the code blocks are raw output, and the weekday and holiday tables
+restate it. The one committed reproduction is the alignment test:
+`scripts/align_gold_ounce.py --live` reproduces B2.2's four correlations to four decimals.
+`align2.py` and `align4.py` were superseded intermediate versions and are not needed to
+reproduce anything.
 
 ---
 

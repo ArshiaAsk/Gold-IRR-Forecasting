@@ -1,6 +1,6 @@
 # Gold_Usd_Oil_IRR — Technical Due-Diligence Report
 
-**Audit date:** 2026-11-13 · **HEAD:** d1670cc (2026-06-16) · **Method:** read-only source review + execution in a scratch copy at `/tmp/gold_audit`. No project file was modified.
+**Audit date:** 2026-11-13 · **HEAD:** d1670cc (2026-06-16) · **Method:** read-only source review + execution in a scratch copy. No project file was modified.
 
 > **Note:** a prior session's notes point to `.agents/STATE.md` and `CLAUDE.md`; neither exists in this checkout or in git history. Everything below was re-derived from code and artifacts. Where an old audit's artifact survives (`logs/baseline_metrics.json`, generated 2026-10-03), I reproduced its numbers independently and they match.
 
@@ -301,7 +301,7 @@ All runs were in `/tmp/gold_audit` (rsync copy of the repo, no `.venv`/`.git`). 
 ### 5.1 Backtest (fresh run)
 
 ```text
-$ cd /tmp/gold_audit/trading_bot && MPLBACKEND=Agg python main_backtest.py
+$ cd trading_bot   # inside the scratch copy; MPLBACKEND=Agg python main_backtest.py
 📅 Period: 2021-07-19 to 2026-06-11   Duration: 1394 days (5.53 years)
 💰 Initial Capital: 1,000,000,000 IRR   Final: 859,421,877 IRR
    Total Return: -14.06 %   CAGR: -2.70 %
@@ -407,7 +407,7 @@ $ python -m unittest test_pipeline -v
 Ran 14 tests in 4.617s
 OK            # synthetic random data only
 
-$ pytest tests/  (project pytest absent; installed to /tmp/pytestpkg)
+$ pytest tests/  (project pytest absent; installed into a throwaway directory)
 test_mlops_endpoints.py            1 passed
 test_mlops_background_tasks.py     2 passed
 test_mlops_api_integration.py      1 passed

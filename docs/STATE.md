@@ -33,7 +33,7 @@ Stage 6 release fixes applied. No merge, no push, no release tag.
 - Refuted H3 (parsing) and H5 (timezone): explicit and implicit `to_datetime` formats are identical on 3,775 records; there are no timestamps and no timezone call in `src/` or `api_layer/`.
 - Refuted H4 as the cause of the weekday pattern, but verified a different merge defect: 588 of 1,424 rows (41.3%) carry a forward-filled global price, 473 of them on Saturdays/Sundays; 317 Yahoo dates are dropped by `how='left'`.
 - **Discovered a real defect the audit missed:** a contiguous 21-month block (2023-10-27 → 2025-08-06, 503 rows, 36.1% of the modelled frame) in which Thursday rows vanish and Friday rows appear, identically in both Iranian series. The post-weekend return moves from Saturday to Friday inside the block. Lag-1 alignment against `GC=F` peaks at +0.231 inside the block vs +0.552 at lag 0 outside. Interpreted as a one-day-early label — **INFERRED, not proven**. *(The alignment evidence was strengthened in Stage 1b; see below and Contradictions item 8.)*
-- Quantified the shift impact (scratch copy, `/tmp/s1`): shifting the Iranian series by −1/+1 does not improve any baseline (persistence R² −0.80 across all three; ridge R² −0.83 to −0.86) and the −1 shift destroys the contemporaneous global-gold correlation (+0.165 → −0.049).
+- Quantified the shift impact (scratch copy): shifting the Iranian series by −1/+1 does not improve any baseline (persistence R² −0.80 across all three; ridge R² −0.83 to −0.86) and the −1 shift destroys the contemporaneous global-gold correlation (+0.165 → −0.049).
 - Confirmed the unit finding: values are Rial (gold/USD/ounce identity holds to 1.010 median, IQR 0.994–1.023); every "Toman" label is 10× wrong.
 - Wrote `docs/DATA_INTEGRITY.md`. Committed docs only.
 
@@ -121,7 +121,7 @@ Stage 6 release fixes applied. No merge, no push, no release tag.
   `docker-build`, `docker-run`, `fetch-data`, all documented in the README.
   `scripts/fetch_data.py` is the TGJU/Yahoo entry point.
 - **Per-row predictions** (`539f92b`): opt-in `--save-predictions` plus `--out-dir`. A scratch
-  run under `/tmp` (one seed, one epoch) wrote 2,760 walk-forward and 1,050 hold-out rows and
+  run in a temporary directory (one seed, one epoch) wrote 2,760 walk-forward and 1,050 hold-out rows and
   did not touch `results/`. `docs/RESULTS.md` §12 records that the headline numbers predate the
   flag.
 - **Docker** (`361b195`, `9aab948`): single image, Python 3.12 slim bookworm pinned by digest,
@@ -307,13 +307,12 @@ All commands run in this session on `refactor/honest-portfolio` at `66b2353` (do
 
 ### 1. Tests
 
-`pytest` is **not installed in `.venv`** (verified: `ModuleNotFoundError`). A scratch environment was used and nothing was installed into the repo:
+`pytest` was **not installed in `.venv`** at the time (verified: `ModuleNotFoundError`). A throwaway environment was used and nothing was installed into the repo. The equivalent command now is:
 
 ```bash
-python3 -m venv /tmp/pytest-scratch
-/tmp/pytest-scratch/bin/pip install pytest          # pytest 9.2.0
+.venv/bin/python -m pip install pytest          # pytest 9.2.0, already in requirements-dev.txt
 PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
-  /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q
+  .venv/bin/python -m pytest tests/ test_pipeline.py -q
 ```
 
 ```
@@ -454,7 +453,7 @@ numbers, all read from the files):
 }
 ```
 
-`/predict` with the 200-row sample (`/tmp/predict_full.json`):
+`/predict` with the 200-row sample (a scratch payload file):
 
 ```json
 {
@@ -732,7 +731,8 @@ evidence was captured; the image is left in place.
 
 **One precision note.** The `results/predictions` line in `.dockerignore` was added while this
 build was already running, so this image was built from the earlier context. It changes nothing
-here: `results/predictions/` did not exist on disk (the smoke run wrote to `/tmp`) and the
+here: `results/predictions/` did not exist on disk (the smoke run wrote to a temporary
+directory) and the
 `ls` above confirms it is not in the image. The next build picks up the rule.
 
 ### 4. CI
@@ -1011,11 +1011,13 @@ curl -sS http://127.0.0.1:8000/health
 curl -sS -H "X-API-Key: demo-key" http://127.0.0.1:8000/model-info
 
 # POST /predict takes raw rows; build a payload from the bundled sample
+PAYLOAD=$(mktemp)
 .venv/bin/python -c "import json,pandas as pd; d=pd.read_csv('data/sample/gold_sample.csv'); \
 print(json.dumps({'rows':[{'date':str(r.Date),'Gold_IRR':float(r.Gold_IRR),'USD_IRR':float(r.USD_IRR), \
-'Ounce_USD':float(r.Ounce_USD),'Oil_USD':float(r.Oil_USD)} for r in d.itertuples()]}))" > /tmp/predict.json
+'Ounce_USD':float(r.Ounce_USD),'Oil_USD':float(r.Oil_USD)} for r in d.itertuples()]}))" > "$PAYLOAD"
 curl -sS -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" \
-  -H "X-API-Key: demo-key" -d @/tmp/predict.json
+  -H "X-API-Key: demo-key" -d @"$PAYLOAD"
+rm -f "$PAYLOAD"
 
 # Streamlit (offline; sample + committed artifacts only)
 .venv/bin/streamlit run streamlit_app.py

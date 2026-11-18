@@ -166,7 +166,7 @@ Slim tree; `requirements.txt` that installs; `data/sample/`; this plan updated. 
 ```bash
 .venv/bin/python -m src.evaluate --variant all --artifact   # exits 0, writes results/ + artifact
 PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
-  /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q   # 35 passed
+  .venv/bin/python -m pytest tests/ test_pipeline.py -q   # 35 passed
 ```
 
 The old `make eval` / `scripts/check_eval.py` acceptance text was a Stage 5b deliverable (Makefile
@@ -218,7 +218,7 @@ state the economic conclusion with numbers. This is **not** a search for a profi
 ```bash
 .venv/bin/python -m src.backtest_check        # exits 0; writes results/backtest.json + log
 PYTHONPATH="$PWD/.venv/lib/python3.12/site-packages:$PWD" \
-  /tmp/pytest-scratch/bin/python -m pytest tests/ test_pipeline.py -q   # 44 passed
+  .venv/bin/python -m pytest tests/ test_pipeline.py -q   # 44 passed
 ```
 
 The old `make backtest` / `scripts/check_backtest.py` acceptance text belonged to a kept
@@ -304,7 +304,7 @@ Not changed: `results/`, `models/`, `docs/EVAL_PROTOCOL.md`, `docs/BACKTEST_PROT
 - `361b195` — single-service Dockerfile, digest-pinned, non-root, healthcheck; HF Space port
   config removed; one-service compose kept and documented.
 - `eed9ee0` — CI workflow.
-- `539f92b` — opt-in `--save-predictions`; scratch smoke run under `/tmp`; note in
+- `539f92b` — opt-in `--save-predictions`; scratch smoke run in a temporary directory; note in
   `docs/RESULTS.md` that the headline numbers predate the flag.
 - `369f151` — final `README.md`, `docs/README_CLAIMS.md`, `scripts/check_readme_numbers.py`,
   `tests/test_readme_numbers.py`.

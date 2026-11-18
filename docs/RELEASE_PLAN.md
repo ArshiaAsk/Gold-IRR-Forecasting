@@ -25,7 +25,7 @@ This file is the contract for Stage 5b. It is committed first; the work below fo
 | 1 | `tests/test_pipeline.py` moved from the repo root; one command runs the whole suite | `python -m pytest -q` → **79 passed** |
 | 2 | `requirements.txt` (runtime) / `requirements-dev.txt` (dev) split; Python 3.12 stated | `python -m pip install -r requirements-dev.txt` in a clean venv |
 | 3 | `Makefile` with `install test check evaluate backtest api app docker-build docker-run fetch-data` | `make -n check` and `make check` |
-| 4 | Opt-in `--save-predictions` on `src/evaluate.py` | scratch run under `/tmp`; `tests/test_predictions_export.py` |
+| 4 | Opt-in `--save-predictions` on `src/evaluate.py` | scratch run in a temporary directory; `tests/test_predictions_export.py` |
 | 5 | Single-service `Dockerfile` (API + Streamlit, non-root, healthcheck, no raw data) | `docker build -t gold-irr .`; `docker run`; `curl /health`; `POST /predict` |
 | 6 | `.github/workflows/ci.yml` on push/PR | YAML parses; every step command run locally in order |
 | 7 | `LICENSE` (MIT, data excluded), `.gitignore`, notebooks banner, stale-artifact cleanup | `git ls-files`; grep for secrets/absolute paths |

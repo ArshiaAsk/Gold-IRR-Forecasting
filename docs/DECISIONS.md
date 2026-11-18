@@ -104,7 +104,7 @@ A contiguous block, 2023-10-27 → 2025-08-06 (503 rows, 36.1% of the modelled f
 
 **Date:** 2026-11-14 · **Status:** accepted
 
-`docs/PLAN.md:48` lists `scripts/audit_calendar.py` as a Stage 1 deliverable. The owner's Stage 1 instruction restricted new files to `docs/DATA_INTEGRITY.md` plus `STATE.md`/`DECISIONS.md`, so no script was committed. All experiments ran in `/tmp/s1`.
+`docs/PLAN.md:48` lists `scripts/audit_calendar.py` as a Stage 1 deliverable. The owner's Stage 1 instruction restricted new files to `docs/DATA_INTEGRITY.md` plus `STATE.md`/`DECISIONS.md`, so no script was committed. All experiments ran in a scratch directory.
 
 **Context:** Stage 1 is read-only by design (D4); a committed script would have been the only executable artifact in a stage whose purpose is evidence, not tooling.
 
