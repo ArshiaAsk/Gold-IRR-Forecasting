@@ -632,6 +632,38 @@ covers the verbatim header, the old lowercase form and the conflict rule.
 
 ---
 
+## D36 — Stage 6 review: scope, no new runs, append-only protocols, legacy tag
+
+**Date:** 2026-11-18 · **Status:** accepted · **Executed in Stage 6**
+
+The independent review of Stage 6 is accepted. Four rules govern the fixes:
+
+1. **Scope.** All five must-fix items (sample vintage, alignment script, wording, D-1 share,
+   global-grid disclosure) and all should-fix items are in scope. The owner TODOs are not:
+   the license holder, author, contact, citation and TGJU permission status stay as marked
+   placeholders.
+2. **No new runs.** No evaluation or backtest is re-run and no model is retrained. The
+   "drop non-global days" sensitivity run is deferred and listed as future work, because
+   every extra run touches the hold-out again. `results/` must stay byte-identical.
+3. **Append-only protocols.** Pre-registered protocol texts are never rewritten. A correction
+   is appended to an `Errata` section at the end of the file, in its own commit. This applies
+   to `docs/EVAL_PROTOCOL.md` and `docs/BACKTEST_PROTOCOL.md`; reports that are not
+   pre-registered (`docs/RESULTS.md`, `docs/DATA_INTEGRITY.md`) may be corrected in place.
+4. **Legacy tag.** The `legacy-pre-refactor` tag will be published with the branch. The README
+   explains why it exists, so the removed bot, MLOps layer and old README remain reachable.
+
+**Context:** the review found that the bundled sample was cut from a different data vintage
+than the committed artifact, that the alignment evidence pointed at scratch files that no
+longer exist, and that the D-1 share and the global forward-fill grid were stated without
+their denominators. The review also confirmed the Stage 6 verdict and the decision to keep
+`results/` frozen.
+
+**Consequences:** the sample's provenance and hashes are documented; the alignment test is
+reproducible from a committed script; the protocol corrections are additive; and the release
+notes can point at the tag without implying that this branch depends on the removed code.
+
+---
+
 ## Open decisions
 
 These are the owner's calls. Each names the stage it blocks.
