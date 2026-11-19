@@ -22,8 +22,29 @@ FULL_PATH = ROOT / "data" / "raw" / "final_gold_dataset.csv"
 METADATA_PATH = ROOT / "models" / "gold_lstm_stationary_v2.metadata.json"
 RESULTS_PATH = ROOT / "results" / "eval_V2.json"
 TEST_KEY = "stage-5a-test-key"
-# The committed serving output for the full 200-row sample (README, STATE 5a/5b).
+# The committed serving output for the full 200-row sample (README, STATE 5a/5b),
+# measured on the reference machine and inside the Docker image.
+#
+# It is not bit-reproducible across machines. The model runs in float32, and the
+# TensorFlow/oneDNN kernels differ between builds and instruction sets, so the
+# last digits move by about 1e-6 relative. The first GitHub Actions run returned
+# -0.00045206176582723856 (4.7e-10 absolute, 1.0e-6 relative away from this value).
+#
+# Tolerance: rel=1e-4. float32 eps is ~1.2e-7, so 1e-4 is ~800x the epsilon and
+# leaves generous headroom for kernel differences. It is still meaningful: any
+# real change to the inputs moves the prediction by ~1e-2 relative or more (a
+# refreshed global vintage moves it by 3.8e-2), and a defect in the features,
+# scalers or weights would be far larger than 1e-4. The test below pins both
+# directions.
 PARITY_LOG_RETURN = -0.00045206130016595125
+PARITY_RTOL = 1e-4
+# The same request on the GitHub Actions runner (ubuntu-latest, first CI run,
+# 2026-11-20). Recorded here as the measured size of cross-machine drift.
+CI_LOG_RETURN = -0.00045206176582723856
+# The bundled sample with only the Ounce_USD column refreshed to the complete
+# global vintage (docs/REVIEW_FIXES.md). A different input, not a float wobble:
+# +1.70e-05 absolute, 3.76e-2 relative.
+FRESH_VINTAGE_LOG_RETURN = -0.0004350765375420451
 
 FORBIDDEN_KEY_PARTS = ("confidence", "interval", "ci_low", "ci_high", "lower_bound", "upper_bound")
 
@@ -143,7 +164,9 @@ def test_sample_csv_header_is_accepted_verbatim(client, headers):
     response = client.post("/predict", json={"rows": rows}, headers=headers)
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["prediction"]["log_return"] == PARITY_LOG_RETURN
+    assert body["prediction"]["log_return"] == pytest.approx(
+        PARITY_LOG_RETURN, rel=PARITY_RTOL
+    )
     assert body["input"]["rows_used"] == len(rows)
     assert body["input"]["last_date"] == "2026-06-13"
 
@@ -152,7 +175,9 @@ def test_lowercase_date_form_still_works(client, headers):
     """The pre-Stage-6 `date` spelling remains accepted."""
     response = client.post("/predict", json={"rows": sample_rows()}, headers=headers)
     assert response.status_code == 200, response.text
-    assert response.json()["prediction"]["log_return"] == PARITY_LOG_RETURN
+    assert response.json()["prediction"]["log_return"] == pytest.approx(
+        PARITY_LOG_RETURN, rel=PARITY_RTOL
+    )
 
 
 def test_conflicting_date_aliases_are_rejected(client, headers):
@@ -170,7 +195,27 @@ def test_matching_date_aliases_are_accepted(client, headers):
     rows[0]["Date"] = rows[0]["date"]
     response = client.post("/predict", json={"rows": rows}, headers=headers)
     assert response.status_code == 200, response.text
-    assert response.json()["prediction"]["log_return"] == PARITY_LOG_RETURN
+    assert response.json()["prediction"]["log_return"] == pytest.approx(
+        PARITY_LOG_RETURN, rel=PARITY_RTOL
+    )
+
+
+def test_parity_tolerance_absorbs_kernel_noise_but_not_a_new_vintage():
+    """rel=1e-4 must accept cross-CPU float32 drift and reject a different input."""
+    # The two machines that have served this sample agree far inside the tolerance.
+    assert abs(PARITY_LOG_RETURN - CI_LOG_RETURN) < 1e-9
+    assert PARITY_LOG_RETURN == pytest.approx(CI_LOG_RETURN, rel=PARITY_RTOL)
+
+    # A 1e-6 relative shift is the size of the observed cross-machine drift; it
+    # must still pass, otherwise the tolerance is too tight to be portable.
+    shifted = PARITY_LOG_RETURN * (1.0 + 1e-6)
+    assert shifted == pytest.approx(PARITY_LOG_RETURN, rel=PARITY_RTOL)
+
+    # The refreshed global vintage is a different input, not a float wobble. If
+    # this ever starts passing, the tolerance has stopped testing anything.
+    assert FRESH_VINTAGE_LOG_RETURN != pytest.approx(PARITY_LOG_RETURN, rel=PARITY_RTOL)
+    relative_gap = abs(FRESH_VINTAGE_LOG_RETURN - PARITY_LOG_RETURN) / abs(PARITY_LOG_RETURN)
+    assert relative_gap > 1e-2
 
 
 def test_output_has_no_confidence_field(client, headers):

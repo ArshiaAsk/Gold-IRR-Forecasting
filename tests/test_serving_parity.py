@@ -188,6 +188,10 @@ def test_no_lookahead_in_serving(bundle):
 
     p_base = bundle.predict_log_return(window(base_features))
     p_alt = bundle.predict_log_return(window(altered_features))
+    # Stays an exact ==: both calls are in this process, on the same model
+    # object, with feature arrays the check above proved bit-identical
+    # (check_exact=True). Bitwise equality is the claim here — no lookahead —
+    # not a cross-machine reproduction, so there is no float32 kernel drift.
     assert p_base == p_alt
 
     # Positive control: a change at t must move the features at t.
