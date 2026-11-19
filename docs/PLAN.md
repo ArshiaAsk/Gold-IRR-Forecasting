@@ -323,8 +323,9 @@ Not changed: `results/`, `models/`, `docs/EVAL_PROTOCOL.md`, `docs/BACKTEST_PROT
 Documentation only after `6aa03f3`; no code, model or committed result changed.
 
 The image was built and run after the last code commit: 2.99 GB, 4,224.9 s of build time,
-`healthy`, and a prediction bit-identical to a local run. That evidence is in
-`docs/STATE.md` → "Stage 5b acceptance outputs" §3.
+`healthy`, and a prediction matching a local run to about 1e-9 absolute (1e-6 relative — the
+cross-machine tolerance; see `docs/STATE.md` → "CI first run (2026-11-20)"). That evidence is
+in `docs/STATE.md` → "Stage 5b acceptance outputs" §3.
 
 Footprint, Docker evidence, YAML parse and the final acceptance outputs are in
 `docs/STATE.md` → "Stage 5b acceptance outputs".

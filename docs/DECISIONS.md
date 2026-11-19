@@ -689,6 +689,36 @@ same message and the same tagger date.
 
 ---
 
+## D38 — Parity is tested with a tolerance, not exact float equality (2026-11-20)
+
+**Date:** 2026-11-20 · **Status:** accepted · **Executed after the first CI run**
+
+The first GitHub Actions run failed 3 of 91 tests. All three were exact `==` comparisons of the
+served `log_return` against the hard-coded `-0.00045206130016595125` in
+`tests/test_api_contract.py`. The runner returned `-0.00045206176582723856`: 4.66e-10 absolute,
+1.03e-6 relative. The model runs in float32 and the TensorFlow/oneDNN kernels differ by CPU and
+build, so the last digits of an inference are not portable.
+
+The three assertions now use `pytest.approx(..., rel=1e-4)` (`PARITY_RTOL`). float32 eps is
+~1.2e-7, so 1e-4 is about 800x eps: enough for kernel drift, far below any real defect. The
+same prediction under a refreshed global vintage moves by 3.76e-2 relative, so the tolerance
+cannot hide a data or feature bug. A dedicated test pins both sides: the CI value and a
+1e-6-relative shift pass, the fresh-vintage value fails.
+
+Same-process comparisons stay as they were. `test_no_lookahead_in_serving` keeps
+`p_base == p_alt` because both calls use the same model object on feature arrays proved
+bit-identical by `check_exact=True`; there is no kernel variation to absorb, and bitwise
+equality is the claim being tested.
+
+**Reason:** a portable test must assert what is portable. The exact assertion encoded a
+property of one machine, and the README's "bit-identical" wording repeated the same mistake.
+
+**Scope:** model-output comparisons against committed constants across machines. Feature parity
+(1e-9) and served-vs-evaluation parity (1e-6, same process) are unchanged. No model, data or
+`results/` file changed.
+
+---
+
 ## Open decisions
 
 These are the owner's calls. Each names the stage it blocks.

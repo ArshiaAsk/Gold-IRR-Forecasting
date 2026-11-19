@@ -53,6 +53,7 @@ Paths are relative to the repository root. `eval_V2.json` means `results/eval_V2
 | API returns 401 for a wrong key and 422 for 40 rows | `src/api/security.py`, `src/api/main.py` | ran both requests |
 | API accepts the sample CSV header verbatim (`Date`, `Gold_IRR`, `USD_IRR`, `Ounce_USD`, `Oil_USD`) | `src/api/main.py` `FIELD_ALIASES`; `tests/test_api_contract.py` | test posts `csv_rows()` with no renaming and asserts 200 + parity |
 | Conflicting `date` and `Date` values return 422 | `src/api/main.py` `_reject_conflicting_aliases`; `tests/test_api_contract.py` | test supplies both with different values and asserts 422 |
+| Served `log_return` reproduces across machines to about 1e-9 absolute, not bit-exactly | `tests/test_api_contract.py` (`PARITY_RTOL`, `test_parity_tolerance_absorbs_kernel_noise_but_not_a_new_vintage`); first CI run | local `-0.00045206130016595125`, runner `-0.00045206176582723856`; the test rejects the fresh-vintage value, so the tolerance still bites |
 | API response values (`log_return` etc.) | live run against the 200-row sample, 2026-11-18 | ran the README script; captured output below |
 | No confidence field in the response | `src/api/main.py`; `tests/test_api_contract.py` | test walks every key |
 | No rate limiter, deliberately | `src/api/security.py` module docstring | read the file |
@@ -60,7 +61,7 @@ Paths are relative to the repository root. `eval_V2.json` means `results/eval_V2
 | Image is 2.99 GB on disk; the `pip install` layer is 2,240 MB | live build, 2026-11-17 | `docker images`; `docker history` |
 | Build took 4,224.9 s (70.4 min) on the reference machine | live build | `BUILD_SECONDS=4224.88`; `docs/STATE.md` Stage 5b §3 |
 | Stage 6 rebuild took 1 s with the dependency layer cached; size stayed 2.99 GB | live build, 2026-11-18 | `BUILD_SECONDS=1`; `docker images`; `docker image inspect .Size` = 603,727,316 (the verification rebuild later the same day: `fb0788de3bd`, 603,728,251 bytes, still 2.99 GB) |
-| Container reports healthy; prediction bit-identical to a local run | live run, 2026-11-17 and 2026-11-18 | `docker ps` "healthy"; `-0.00045206130016595125` both ways. The identity holds for the bundled sample as shipped; a refreshed ounce series gives `-0.0004350765375420451` (see `data/sample/README.md`) |
+| Container reports healthy; prediction matches a local run to about 1e-9 absolute | live run, 2026-11-17 and 2026-11-18; CI, 2026-11-20 | `docker ps` "healthy"; `-0.00045206130016595125` both ways. Across machines the value reproduces to about 1e-9 absolute (about 1e-6 relative): GitHub Actions returned `-0.00045206176582723856`. A refreshed ounce series gives `-0.0004350765375420451` (see `data/sample/README.md`) |
 | Image excludes `data/raw`, `data/processed`, tests, notebooks, `.env` | live image | `ls` inside the container |
 | Non-root UID 10001 | `Dockerfile`; live image | `docker exec id` → `uid=10001(appuser)` |
 | Streamlit runs from the same image on 8501 | live run | `curl` → HTTP 200; logs show port 8501 |
@@ -94,7 +95,7 @@ path for each group.
 | "one validation label is ~0.50% of validation MSE" | The 0.50% was `label² / Σy²`, a zero-prediction approximation. The exact share of the loss the model minimised is 0.6912% (`scripts/d1_share.py`). The README now says 0.69% and names the denominator; the review's "0.86" was `label² / mean(y²)`, not a share of the loss. |
 | "the hold-out was scored once" | Literally false: six prediction passes, three scored. The README states the count and the Streamlit header now says "Hold-out (V2)". |
 | "no shorting except S3" | Wrong: there is no shorting anywhere. S3 holds gold when the prediction is positive and cash otherwise. |
-| "the Docker prediction is bit-identical" without qualification | True only for the bundled sample as shipped. A refreshed global ounce series changes the digits; the README now gives the observed difference (+1.70e-05). |
+| "the Docker prediction is bit-identical" without qualification | True only for the bundled sample as shipped and only on the machine that measured it: the first CI run differed by 1e-6 relative. A refreshed global ounce series changes the digits far more (3.76e-2 relative); the README gives both the cross-machine tolerance and the observed difference (+1.70e-05). |
 | "production-ready" / "deployable" / "profitable" | Not supported by the results and explicitly excluded by the brief. |
 | A live demo URL | No app was deployed. The README describes the Docker image as the only deployment artifact and does not claim a live URL. |
 | A named author, email or citation link | Not supplied. Left as clearly marked `TODO` placeholders. |

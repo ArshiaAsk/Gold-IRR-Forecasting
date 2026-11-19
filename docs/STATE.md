@@ -685,9 +685,10 @@ not a container that merely started.
 "warnings": ["stale_input: last date 2026-06-13 is 157 days old (limit 7)"]
 ```
 
-`log_return` is **bit-identical** to the host run and to the value in the README
-(`-0.00045206130016595125`), so the image reproduces the committed serving output, not just
-something plausible. The response also carries the `model` block (`git_commit 479a9ab`, seed 42)
+`log_return` matched the host run digit for digit (`-0.00045206130016595125`), so the image
+reproduced the committed serving output, not just something plausible. That is a same-machine
+observation, not a cross-machine guarantee: see "CI first run (2026-11-20)" at the end of this
+file. The response also carries the `model` block (`git_commit 479a9ab`, seed 42)
 and four `caveats`; the README shows a trimmed example.
 
 Failure paths inside the container:
@@ -809,14 +810,15 @@ Four tests were added to `tests/test_api_contract.py` (none removed):
 * `test_sample_csv_header_is_accepted_verbatim` — posts
   `json.loads(pd.read_csv(...).to_json(orient="records"))` with keys
   `Date,Gold_IRR,USD_IRR,Ounce_USD,Oil_USD`; asserts 200 and
-  `log_return == -0.00045206130016595125`.
+  `log_return == -0.00045206130016595125` (an exact comparison at the time; relaxed to
+  `rel=1e-4` after the first CI run, see "CI first run (2026-11-20)").
 * `test_lowercase_date_form_still_works` — the old `date` form returns the same value.
 * `test_conflicting_date_aliases_are_rejected` — both aliases with different values → 422.
 * `test_matching_date_aliases_are_accepted` — both with the same value → 200.
 
 **Sample parity proof:** the verbatim-header request returned HTTP 200 with
-`log_return = -0.00045206130016595125`, exactly the committed Stage 5a/5b parity value. The
-full suite is **87 passed** (83 before Stage 6).
+`log_return = -0.00045206130016595125`, the committed Stage 5a/5b parity value on this machine.
+The full suite is **87 passed** (83 before Stage 6).
 
 ### 2. README example
 
@@ -1086,3 +1088,38 @@ The old-to-new map is `docs/COMMIT_MAP.md`. Hash references in `README.md` and t
 non-protocol docs were updated; the protocol bodies keep their hashes and record the change in
 their Errata sections. Backup refs: `backup/pre-email-rewrite-main`,
 `backup/pre-email-rewrite-branch`.
+
+---
+
+## CI first run (2026-11-20)
+
+The first GitHub Actions run (`.github/workflows/ci.yml`, `ubuntu-latest`, Python 3.12,
+`make check`) reported **3 failed, 85 passed, 3 skipped of 91**. The three failures were the
+exact `==` assertions against the hard-coded `-0.00045206130016595125` in
+`tests/test_api_contract.py`: `test_sample_csv_header_is_accepted_verbatim`,
+`test_lowercase_date_form_still_works` and `test_matching_date_aliases_are_accepted`. The
+runner returned **`-0.00045206176582723856`**, 4.66e-10 absolute and 1.03e-6 relative away.
+
+**Diagnosis.** The model runs in float32; the TensorFlow/oneDNN kernels differ by CPU and
+build, so the last digits of an inference are not portable. The model and data are unaffected,
+and no committed number changed. The tests were stricter than the property they claimed to
+test, and the README's "bit-identical" wording repeated that mistake.
+
+**Fix (D38).** The three assertions now use `pytest.approx(..., rel=1e-4)` (`PARITY_RTOL`),
+documented next to the constant. A new test,
+`test_parity_tolerance_absorbs_kernel_noise_but_not_a_new_vintage`, pins the tolerance from both
+sides: the CI value and a 1e-6-relative shift pass, while the refreshed global vintage
+(`-0.0004350765375420451`, 3.76e-2 relative) fails. `test_no_lookahead_in_serving` keeps its
+exact `==` with a comment: both calls are same-process on bit-identical feature arrays.
+
+| Check | Command | Result |
+|---|---|---|
+| Local suite | `make check` | **89 passed, 3 skipped, 92 collected**; README number check: **58 marked numbers match** |
+| Clean-clone simulation | `pytest -q` with `data/raw/*.csv` moved aside | **89 passed, 3 skipped** (the three `local full series not present` skips) |
+| Tolerance still meaningful | scratch copy of the test file, expected value ×(1+1e-6) | **3 passed** |
+| Tolerance still bites | scratch copy of the test file, expected value ×(1+1e-3) | **3 failed** |
+
+The local machine no longer has `data/raw/final_gold_dataset.csv` (it is gitignored and was not
+restored after the last verification), so the three skips occur locally without moving anything;
+moving `global_yahoo.csv` aside changes nothing. The scratch copy was deleted; `git status` shows
+only the intended edits. No file under `results/` or `models/` was touched.
