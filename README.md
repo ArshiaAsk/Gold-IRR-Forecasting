@@ -331,8 +331,8 @@ are undocumented and may break without notice.
   on the results was **not measured**; a sensitivity run is future work. It is not claimed to
   help or hurt the model.
 * **The hold-out amendment predates the first fit.** The pre-registered protocol was committed
-  at 2026-11-14 17:59:11 +03:30 (`798981a`); the amendment that set the 2025-10-01 cutoff was
-  committed at 2026-11-14 18:02:01 +03:30 (`cb75162`), 1 min 56 s before the first model fit,
+  at 2026-11-14 17:59:11 +03:30 (`bda5992`); the amendment that set the 2025-10-01 cutoff was
+  committed at 2026-11-14 18:02:01 +03:30 (`74d9369`), 1 min 56 s before the first model fit,
   which `results/run.log` timestamps at 2026-11-14 18:03:57,480. The reason: the first draft
   said "the final 180 rows", but a data-shape check showed those begin 2025-11-05, which would
   skip October; the 2025-10-01 cutoff matches the requested period and gives 210 rows.

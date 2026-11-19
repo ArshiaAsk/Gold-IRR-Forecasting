@@ -267,12 +267,12 @@ Delete the live bot, the MLOps layer, monitoring, supervisor/startup scripts, ex
 
 **Date:** 2026-11-14 · **Status:** accepted · **Executed in Stage 3**
 
-`docs/EVAL_PROTOCOL.md` was written and committed (`798981a`) before `results/` existed or any
+`docs/EVAL_PROTOCOL.md` was written and committed (`bda5992`) before `results/` existed or any
 model was fit. It fixes the task, information timing, the 23-feature set, the three variants,
 five expanding folds with purge/embargo, six models, the metrics, the edge rule and the cost
 sanity check.
 
-**Pre-run amendment (`cb75162`).** The first draft said "the final 180 rows". A data-shape check
+**Pre-run amendment (`74d9369`).** The first draft said "the final 180 rows". A data-shape check
 showed those begin 2025-11-05 and would skip October; the hold-out is instead all rows dated
 2025-10-01 or later (210 rows), matching the requested "~180 rows, 2025-10 onward". The amendment
 was made **before any model fit**. No post-run deviations.
@@ -401,7 +401,7 @@ and drops the requested per-seed and 5-seed backtest tables; reproducing them wo
 re-running the fits, which is prohibited.
 
 Seed 42 was fixed **before** the Stage 3 run (`PRIMARY_SEED = 42` in `src/evaluate.py`,
-committed at `8d7715e` before the results commit), so this is not best-seed selection. It is
+committed at `479a9ab` before the results commit), so this is not best-seed selection. It is
 also the model Stage 5a will serve.
 
 **Hold-out touch count (verified from `results/run.log` and the git history):** Stage 3 scored
@@ -661,6 +661,31 @@ their denominators. The review also confirmed the Stage 6 verdict and the decisi
 **Consequences:** the sample's provenance and hashes are documented; the alignment test is
 reproducible from a committed script; the protocol corrections are additive; and the release
 notes can point at the tag without implying that this branch depends on the removed code.
+
+---
+
+## D37 — Author-email history rewrite (2026-11-19)
+
+**Date:** 2026-11-19 · **Status:** accepted · **Executed before publication**
+
+GitHub rejected the first push with GH007 (the push would publish a private email address).
+The 84 commits in `origin/main..main` were rewritten with `git filter-branch --env-filter` so
+that author and committer identities use the GitHub noreply address
+`183118663+ArshiaAsk@users.noreply.github.com`.
+
+**What did not change.** Every commit keeps its tree, author date, committer date, subject and
+parent order; the `--no-ff` merge of `refactor/honest-portfolio` is preserved. `git diff
+backup/pre-email-rewrite-main main` is silent at the tip, and all 84 old/new pairs match on
+`%aI`, `%cI`, `%T` and `%s`. `origin/main` (`d1670cc`) and its ancestors were not rewritten.
+
+**Consequences.** Every hash in the range changed. The old-to-new map is
+`docs/COMMIT_MAP.md`, and hash references in `README.md` and the non-protocol docs were
+updated in the same commit. The pre-registered protocol bodies (`docs/EVAL_PROTOCOL.md`,
+`docs/BACKTEST_PROTOCOL.md`) keep their original hashes and record the change in their
+append-only Errata sections (D36 §3). Backup refs `backup/pre-email-rewrite-main` and
+`backup/pre-email-rewrite-branch` preserve the pre-rewrite tips. The `legacy-pre-refactor` tag
+was re-created with the noreply identity as tagger, at the same commit (`d1670cc`), with the
+same message and the same tagger date.
 
 ---
 

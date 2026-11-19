@@ -50,7 +50,7 @@ Stage 6 release fixes applied. No merge, no push, no release tag.
 - Also resolved **O6** in code: `signal_history.jsonl` has 7 records, six with `pct/log = 100.0` and only the 2026-02-08 record at 10,000.0. That value is float32 ×100 applied twice (442.9512939 vs recorded 442.9512978, relative diff 8.6e-9), and the same record's `reasoning` string says "4.43%". Not an edit — a one-off double-scaling bug.
 - Appended "Stage 1b" to `docs/DATA_INTEGRITY.md`; updated `docs/DECISIONS.md` and this file. Committed docs only.
 
-### Stage 2a — data correction applied (`d5b8dcd`, `75c927e`)
+### Stage 2a — data correction applied (`659b257`, `0fb6f2c`)
 - Recorded the owner's G1-final call as **D19**: apply the +1 relabel, as a reversible loader transform. Rationale in `docs/DECISIONS.md`: the Jalali field cannot witness the defect (TGJU emits both fields from one record), so its silence is uninformative; the alignment test is the independent evidence.
 - Added `apply_block_date_shift()` to `src/data_loader.py`, called from `DataLoader.get_tgju_history()` after date parsing and **before** the gold/USD merge. Window (`2023-10-27 → 2025-08-06`), `+1` day and an enable flag live in `config/settings.py` (`DATE_SHIFT_*`), default enabled. The number of relabelled rows is logged on every run.
 - The helper only changes the `Date` label. It copies the frame, leaves prices untouched, and raises `ValueError` on any date collision instead of silently corrupting the merge.
@@ -58,7 +58,7 @@ Stage 6 release fixes applied. No merge, no push, no release tag.
 - Verified on `data/raw/final_gold_dataset.csv` (no network): **503 rows relabelled, 0 collisions, 1,424 → 1,424 rows, prices identical**; weekday histogram Thu 137 → 220, Fri 90 → 4; features regenerate **1,424 → 1,394** rows. Block alignment on local data: **+0.1833 → +0.3722** under +1, post-block **+0.4126 → −0.0990**. Details and caveats in `docs/DATA_INTEGRITY.md` → "Stage 2a — Applied fix".
 - `yfinance` and `curl_cffi` are now imported inside the fetch methods, so the module and its offline tests import without the network stack.
 
-### Stage 2b — scope reduction (`147d58b`, `5c6a74a`, `66b2353`)
+### Stage 2b — scope reduction (`a0f8cfd`, `e5751a6`, `0a35d06`)
 - Deleted **75 tracked paths**: `api_layer/`, `src/mlops/`, `src/monitoring/`, `monitoring/`, `examples/`, `example_usage.py`, `supervisord.conf`, `start.sh`, `quick-start.sh`, empty `main.py`, `setup.py`, `src/api/client_example.py`, stale `outputs/`, `notebooks/catboost_info/`, and the 7 tests that exercised removed modules. All reachable at `legacy-pre-refactor`.
 - Grepped kept code before deleting: only `streamlit_app.py` imported `api_layer` (guarded try/except) and only `src/api/main.py` imported `src.mlops` (rewritten). `src/monitoring/` and `monitoring/` were imported by nothing. The Streamlit guarded import was reduced to the kept predictor.
 - Minimal API (`src/api/main.py`): exactly `/health`, `/model-info`, `/predict`. No MLOps wiring, no Prometheus, no ONNX, no audit store. Starts even when artifacts are absent; `/health` returns 200 and reports `model_loaded`. `/predict` validates the real `(30, 15)` schema with pydantic v2. Removed `/predict-with-confidence` and the artificial Gaussian interval in `src/api/predictor.py`.
@@ -69,9 +69,9 @@ Stage 6 release fixes applied. No merge, no push, no release tag.
 - `requirements.txt` rebuilt from actual imports: adds `yfinance`, `curl_cffi`, `requests`, `pytest`; removes `mlflow`, `evidently`, `onnxruntime`, `tf2onnx`, `schedule`, `prometheus-*`, `aiofiles`, `psutil`. TensorFlow/Keras pins kept. Notebook-only libraries are listed as optional comments.
 - **Scalers are not committed** (`models/scaler_X.pkl`, `models/scaler_y.pkl` are untracked and ignored). **Stage 3 regenerates the model and both scalers and commits them together**, so the committed model and scalers always come from the same training run.
 
-### Stage 3 — honest modeling and evaluation (`798981a`, `cb75162`, `37585ac`, `8d7715e`, `64c9798`, `5f4abaa`)
+### Stage 3 — honest modeling and evaluation (`bda5992`, `74d9369`, `fe932e9`, `479a9ab`, `41a450c`, `e59858c`)
 
-- **Protocol pre-registered before any model fit.** `docs/EVAL_PROTOCOL.md` (`798981a`) fixes the task, information timing, 23-feature set, V1/V2/V3 variants, five expanding folds with 30-row purge / 5-row embargo, six models, metrics, the edge rule and cost sanity. One **pre-run** amendment (`cb75162`): the hold-out is all rows from 2025-10-01 (210 rows), not the literal last 180 rows, which begin 2025-11-05 and would skip October. No post-run deviations.
+- **Protocol pre-registered before any model fit.** `docs/EVAL_PROTOCOL.md` (`bda5992`) fixes the task, information timing, 23-feature set, V1/V2/V3 variants, five expanding folds with 30-row purge / 5-row embargo, six models, metrics, the edge rule and cost sanity. One **pre-run** amendment (`74d9369`): the hold-out is all rows from 2025-10-01 (210 rows), not the literal last 180 rows, which begin 2025-11-05 and would skip October. No post-run deviations.
 - **Data.** Iranian series from the untracked local snapshot (1,424 rows, 2021-06-14 → 2026-06-13). One complete Yahoo `GC=F`/`BZ=F` pull for all variants (cached at `data/raw/global_yahoo.csv`), because the CSV lacks 110 corrected-date global bars (83 Thursdays). V2 relabels 503 merged block dates +1 before the global merge; V3 drops the block and keeps LSTM sequences inside segments. Fresh oil matches the CSV 911/911; fresh ounce differs by a median 0.33% in level / 0.018% in log return (corr 0.993).
 - **Features.** 23 stationary features, single source of truth in `src/feature_eng.py::add_stationary_features` (gold/USD/ounce/oil return lags, RSI 14, MACD/price, Bollinger %B and bandwidth 20, price/SMA−1 7/20/60, RV 5/20). No raw price level, no calendar dummy.
 - **Models.** Persistence, historical mean, ridge-own (4 gold lags), ridge-full (23 features), stationary LSTM 64→32→16 (5 seeds), legacy-spec LSTM on the old 15 raw-level features (3 seeds, V2 only). Four fixed configurations, no tuning; 109 LSTM fits.
@@ -83,21 +83,21 @@ Stage 6 release fixes applied. No merge, no push, no release tag.
 - **Artifact.** `models/gold_lstm_stationary_v2.keras` + `models/scaler_X_stationary_v2.pkl` + `models/scaler_y_stationary_v2.pkl` + `models/gold_lstm_stationary_v2.metadata.json`, trained on V2 pre-hold-out rows (fit 2021-08-28 → 2024-12-31, validation 2025-02-08 → 2025-09-30, seed 42). Not wired into the API or Streamlit; `models/gold_lstm_v2.keras` remains for the API.
 - **Results files.** `results/eval_V1.json`, `results/eval_V2.json`, `results/eval_V3.json`, `results/eval_summary.csv`, `results/run.log`. Full tables and interpretation in `docs/RESULTS.md`.
 
-### Stage 4 — economic reality (`1e3e634`, `0cc0647`, `9b9caca`, `cf09f8d`, `3b5ac3a`)
+### Stage 4 — economic reality (`5a8ce1c`, `228b904`, `783ab26`, `35a9769`, `31ae157`)
 
-- **Protocol pre-registered** in `docs/BACKTEST_PROTOCOL.md` (`0cc0647`) before any backtest result: hold-out only, seed-42 artifact by inference, S0–S3, four cost scenarios, moving-block bootstrap, fixed decision rule.
+- **Protocol pre-registered** in `docs/BACKTEST_PROTOCOL.md` (`228b904`) before any backtest result: hold-out only, seed-42 artifact by inference, S0–S3, four cost scenarios, moving-block bootstrap, fixed decision rule.
 - **Prediction source.** Stage 3 saved aggregate metrics only; no per-row predictions. Stage 4 evaluates the committed seed-42 artifact by inference, with no training. Per-seed and 5-seed backtest tables are not recoverable and are dropped (D27).
 - **Artifact audit.** Fit 2021-08-28 → 2024-12-31 (951), validation 2025-02-08 → 2025-09-30 (173), hold-out 2025-10-01 → 2026-06-11 (210). No hold-out feature row is in fit or validation; scalers are fit only through 2024-12-31. One validation label (2025-09-30 target = 2025-10-01 return, +2.15%, 0.69% of validation loss with the artifact's predictions; 0.50% was `label² / Σy²`) entered early stopping; recorded as `docs/EVAL_PROTOCOL.md` §11 D-1 and Errata, not fixed (D28).
-- **Run.** `.venv/bin/python -m src.backtest_check`, code `9b9caca`, 2026-11-16, inference only. Two inference-only passes (development + final) produced identical results; Stage 3 scored the hold-out three times and predicted it once unscored. Total six prediction passes, three scored.
+- **Run.** `.venv/bin/python -m src.backtest_check`, code `783ab26`, 2026-11-16, inference only. Two inference-only passes (development + final) produced identical results; Stage 3 scored the hold-out three times and predicted it once unscored. Total six prediction passes, three scored.
 - **Verdict: no added value over buy-and-hold.** At C2 (0.75%/side): S0 +56.71%, S1 +47.89%, S2 +1.13%, S3 +36.90%. S2 diff −22.45 bp/day, CI [−45.45, −7.89] (significantly worse); S3 diff −7.56 bp/day, CI [−23.96, +2.01] (no value). At C0: S0 +57.89%, S1 +49.00%, S2 +12.37%, S3 +52.12%.
 - **Prediction spread.** Seed-42 hold-out `std_pred` 0.002482 vs `std_actual` 0.026456 (9.4%), corr +0.031, RMSE 0.026540, R² +0.000367. The Stage 3 5-seed headline is `std_pred` 0.003304, corr +0.0381, RMSE 0.026543, R² +0.000119. Seed 42 is typical, not stronger; the model is still near-constant.
 - **Gold in USD.** +5.97% over the traded period vs +57.89% nominal gold; USD/IRR +49.0%. No inflation series exists; gold-in-USD is the currency-neutral proxy, not a real return.
 - **`trading_bot/` removed** with `git rm`; no kept code imported it; the tag preserves it (D26). `src/backtest_check.py` + 9 tests; **44 tests pass**.
 - **Results files.** `results/backtest.json`, `results/backtest.log`. Full tables and plain-language reading in `docs/RESULTS.md` §11.
 
-### Stage 5a — serving (`1768b2e`, `f587864`, `1bd4a5b`, `f749791`, `e9d65e0`)
+### Stage 5a — serving (`92cf95d`, `0074e45`, `9156234`, `60b0e71`, `e16fc67`)
 
-- **Design first.** `docs/SERVING_DESIGN.md` committed at `1768b2e` before any serving code: input contract, the 89-row minimum with its derivation, error codes, output contract, timing, auth, concurrency and the four-tab UI.
+- **Design first.** `docs/SERVING_DESIGN.md` committed at `92cf95d` before any serving code: input contract, the 89-row minimum with its derivation, error codes, output contract, timing, auth, concurrency and the four-tab UI.
 - **One feature path.** `src/feature_eng.py::prepare_model_input` is the only raw-row adapter; it validates the contract and calls `add_stationary_features`, the function training and evaluation already use. Measured parity: **0.0** max absolute difference over 696 row-comparisons at 24 sample positions and 5 post-block positions of the full series; served prediction equals the evaluation-primitive prediction exactly (max diff 0.0 over 5 positions).
 - **API.** `src/api/` rewritten around the seed-42 artifact: raw rows in, log return out, metadata and metrics read from `models/gold_lstm_stationary_v2.metadata.json` and `results/*.json`. The `(30, 15)` contract, `FeatureBuilder`, the rate limiter and every price-level metric reference are gone.
 - **Auth.** `API_KEY` compared with `hmac.compare_digest`; `/health` open; `API_KEY` unset → 503 on protected endpoints. No rate limiter (documented omission).
@@ -106,34 +106,34 @@ Stage 6 release fixes applied. No merge, no push, no release tag.
 - **Footprint.** Streamlit + TensorFlow 2.20 + model + one prediction: **689 MB** peak RSS, **3.12 s** from import to prediction. Full AppTest run (all four tabs): **699 MB**, 3.2 s. Direct requirements total **2,345 MB** installed (TensorFlow alone 1,858 MB).
 - **Not changed:** `results/`, `models/`, `docs/EVAL_PROTOCOL.md`, `docs/BACKTEST_PROTOCOL.md`, `Dockerfile`, `README.md`. No retraining, no new seeds.
 
-### Stage 5b — reproducibility, packaging, CI and README (`e6f8210` … `13ce2c6`, `9aab948`)
+### Stage 5b — reproducibility, packaging, CI and README (`45afcae` … `879d87e`, `5fd0ee1`)
 
-- **Release plan first.** `docs/RELEASE_PLAN.md` committed at `e6f8210` before any Stage 5b
+- **Release plan first.** `docs/RELEASE_PLAN.md` committed at `45afcae` before any Stage 5b
   change: deliverables, acceptance commands and the README outline.
-- **One test command.** Root `test_pipeline.py` moved to `tests/test_pipeline.py` (`d59dc34`);
+- **One test command.** Root `test_pipeline.py` moved to `tests/test_pipeline.py` (`9d3515b`);
   plain `pytest` now collects **83 passed**. The old "44" was 30 tests under `tests/` plus 14
   in the root file; plain `pytest` saw only 30 because `pytest.ini` sets `testpaths = tests`.
   No test was added or removed by the move.
-- **Dependencies split** (`60e9870`): `requirements.txt` is the serving path with
+- **Dependencies split** (`10cb5f5`): `requirements.txt` is the serving path with
   `tensorflow-cpu==2.20.0`; `requirements-dev.txt` adds pytest, httpx, yfinance, curl_cffi,
   matplotlib and seaborn. Python **3.12** is pinned in the Dockerfile and CI.
-- **Makefile** (`13ce2c6`): `install`, `test`, `check`, `evaluate`, `backtest`, `api`, `app`,
+- **Makefile** (`879d87e`): `install`, `test`, `check`, `evaluate`, `backtest`, `api`, `app`,
   `docker-build`, `docker-run`, `fetch-data`, all documented in the README.
   `scripts/fetch_data.py` is the TGJU/Yahoo entry point.
-- **Per-row predictions** (`539f92b`): opt-in `--save-predictions` plus `--out-dir`. A scratch
+- **Per-row predictions** (`6aa03f3`): opt-in `--save-predictions` plus `--out-dir`. A scratch
   run in a temporary directory (one seed, one epoch) wrote 2,760 walk-forward and 1,050 hold-out rows and
   did not touch `results/`. `docs/RESULTS.md` §12 records that the headline numbers predate the
   flag.
-- **Docker** (`361b195`, `9aab948`): single image, Python 3.12 slim bookworm pinned by digest,
+- **Docker** (`131e4f3`, `5fd0ee1`): single image, Python 3.12 slim bookworm pinned by digest,
   non-root UID 10001, healthcheck on `/health`, API default and Streamlit from the same image.
   No raw data, tests, notebooks or legacy artifacts. Compose keeps one service and documents
   port/auth/healthcheck. The legacy managed-runtime port configuration is gone.
-- **CI** (`eed9ee0`): push/PR workflow, Python 3.12, pip cache, `requirements-dev.txt`,
+- **CI** (`77a4b6f`): push/PR workflow, Python 3.12, pip cache, `requirements-dev.txt`,
   `make check`.
-- **Hygiene** (`1cf8285`): MIT `LICENSE` (data excluded), `results/predictions/` ignored,
+- **Hygiene** (`067e1f5`): MIT `LICENSE` (data excluded), `results/predictions/` ignored,
   notebooks moved to `notebooks/exploratory/` with cleared outputs and a banner, legacy model
   removed, absolute notebook path replaced.
-- **README** (`369f151`): rewritten from scratch, 319 lines, 58 marked numbers checked against
+- **README** (`31a057f`): rewritten from scratch, 319 lines, 58 marked numbers checked against
   `results/*.json`; `docs/README_CLAIMS.md` records every claim and its verification.
 - **Absolute paths in the run logs.** `results/run.log` and `results/backtest.log` contained
   the reference machine's absolute paths (`Wrote <REPO>/results/eval_V2.json`). Stage 5b left
@@ -246,7 +246,7 @@ Everything below was produced by a command in this session. Nothing here is copi
 
 | Fact | How verified |
 |---|---|
-| Protocol committed before any model fit; one pre-run hold-out amendment | `git log -- docs/EVAL_PROTOCOL.md` (`798981a`, `cb75162`); no `results/` before `798981a` |
+| Protocol committed before any model fit; one pre-run hold-out amendment | `git log -- docs/EVAL_PROTOCOL.md` (`bda5992`, `74d9369`); no `results/` before `bda5992` |
 | Feature frame: **1,364** rows for V1/V2; **860** for V3 | `results/eval_V1.json` / `eval_V3.json` metadata; run log |
 | Hold-out: **210** rows, **2025-10-01 → 2026-06-11** | `results/eval_V2.json` metadata |
 | Walk-forward: **5** folds; pooled **n=552** (V1/V2), **300** (V3) | `results/eval_summary.csv` |
@@ -268,7 +268,7 @@ Everything below was produced by a command in this session. Nothing here is copi
 
 | Fact | How verified |
 |---|---|
-| Protocol committed before any backtest result | `git log -- docs/BACKTEST_PROTOCOL.md` (`0cc0647`); code commit `9b9caca` |
+| Protocol committed before any backtest result | `git log -- docs/BACKTEST_PROTOCOL.md` (`228b904`); code commit `783ab26` |
 | Hold-out predictions: seed-42 artifact only, inference; no training | `src/backtest_check.py`; `results/backtest.json` metadata |
 | Seed-42 HO: RMSE **0.026540**, R² **+0.000367**, corr **+0.0312**, std_pred **0.002482** vs std_actual **0.026456** | `results/backtest.json` |
 | Stage 3 5-seed HO: RMSE **0.026543**, R² **+0.000119**, corr **+0.0381**, std_pred **0.003304** | `results/eval_V2.json` |
@@ -290,7 +290,7 @@ Everything below was produced by a command in this session. Nothing here is copi
 
 | Fact | How verified |
 |---|---|
-| Design note committed before serving code | `git log -- docs/SERVING_DESIGN.md` → `1768b2e`; code commits follow |
+| Design note committed before serving code | `git log -- docs/SERVING_DESIGN.md` → `92cf95d`; code commits follow |
 | Minimum rows **89** = (60 − 1) + 30 | derived from `price_sma_60` and `sequence_length`; 88-row tail → 29 feature rows, 89 → 30 |
 | Feature parity: **0.0** max abs difference | 24 sample positions, 696 row-comparisons, plus 5 post-block positions of the full series |
 | Prediction parity: **0.0** max abs difference | 5 positions, served vs `build_sequences` + scalers + model |
@@ -303,7 +303,7 @@ Everything below was produced by a command in this session. Nothing here is copi
 
 ## Stage 2b acceptance outputs
 
-All commands run in this session on `refactor/honest-portfolio` at `66b2353` (docs commit follows).
+All commands run in this session on `refactor/honest-portfolio` at `0a35d06` (docs commit follows).
 
 ### 1. Tests
 
@@ -355,12 +355,12 @@ Verified by pointing the path constants at an absent directory and entering the 
 
 ### 3. Size
 
-| Metric | Before Stage 2b (`75c927e`) | After (`66b2353`) |
+| Metric | Before Stage 2b (`0fb6f2c`) | After (`0a35d06`) |
 |---|---|---|
 | `git ls-files \| wc -l` | **117** | **44** |
 | tracked Python files | 71 | 26 |
 | Python LOC (`git ls-files '*.py' \| xargs cat \| wc -l`) | **11,367** | **5,301** |
-| deleted paths vs `75c927e` | — | **75** (5,469 Python LOC) |
+| deleted paths vs `0fb6f2c` | — | **75** (5,469 Python LOC) |
 
 ### 4. Deleted paths, grouped by reason
 
@@ -395,7 +395,7 @@ find api_layer src/mlops                                                  # No s
 
 ## Stage 5a acceptance outputs
 
-All commands run on `refactor/honest-portfolio` at `e9d65e0`, 2026-11-17, Python 3.12.3.
+All commands run on `refactor/honest-portfolio` at `e16fc67`, 2026-11-17, Python 3.12.3.
 
 `pytest 9.2.0` was **installed into `.venv`** for this stage (it was absent; Stage 2b used a
 scratch environment). `requirements.txt` already lists `pytest`; nothing else was installed.
@@ -687,7 +687,7 @@ not a container that merely started.
 
 `log_return` is **bit-identical** to the host run and to the value in the README
 (`-0.00045206130016595125`), so the image reproduces the committed serving output, not just
-something plausible. The response also carries the `model` block (`git_commit 8d7715e`, seed 42)
+something plausible. The response also carries the `model` block (`git_commit 479a9ab`, seed 42)
 and four `caveats`; the README shows a trimmed example.
 
 Failure paths inside the container:
@@ -934,13 +934,13 @@ README number check passed: 58 marked numbers match results/*.json
 **Branch log** (the commit adding this block is the next one; this is its parent history):
 
 ```text
-5bc9516 docs(readme): record the Stage 6 Docker rebuild measurement
-383000d chore(results): redact absolute paths from the committed run logs
-833fe0d docs: remove managed-deployment references
-5917b80 docs(decisions): record GATE 5b acceptance and the Docker-only decision
-d293c75 docs(readme): add a runnable sample prediction and exact field names
-15f4cda fix(api): accept the sample CSV header verbatim
-2423b80 docs: add the Stage 6 release-fix plan
+ee9a11c docs(readme): record the Stage 6 Docker rebuild measurement
+4bcc421 chore(results): redact absolute paths from the committed run logs
+fb3eecd docs: remove managed-deployment references
+166867a docs(decisions): record GATE 5b acceptance and the Docker-only decision
+f429b7f docs(readme): add a runnable sample prediction and exact field names
+6227f58 fix(api): accept the sample CSV header verbatim
+e46e20a docs: add the Stage 6 release-fix plan
 ```
 
 **Remaining TODOs for the owner:**
@@ -1035,7 +1035,7 @@ in a fresh clone: `data/sample/` is, and the full series must be fetched or supp
 
 ## Stage 6 review — final verification (2026-11-18)
 
-**Branch:** `refactor/honest-portfolio` · **HEAD at the start of this block:** `d4d9353`
+**Branch:** `refactor/honest-portfolio` · **HEAD at the start of this block:** `ef63f1e`
 **Scope:** the Stage 6 review fixes. No evaluation or backtest run, no retraining, no merge,
 push or tag. `results/` was not written.
 
@@ -1052,7 +1052,7 @@ push or tag. `results/` was not written.
 | Docker health | `curl /health` | 200 `{"status":true,"model_loaded":true,...}` |
 | Docker predict | 200 sample rows with the CSV header `Date,Gold_IRR,USD_IRR,Ounce_USD,Oil_USD`, `X-API-Key` | 200, `log_return -0.00045206130016595125`, `rows_used 200`, `feature_rows 141` |
 | Docker auth | the same request without the key | **401** `{"code":"invalid_api_key",...}` |
-| `results/` unchanged | `git diff --exit-code HEAD -- results/`; `git diff --stat 5c2208e^..HEAD -- results/` | no output; empty diff |
+| `results/` unchanged | `git diff --exit-code HEAD -- results/`; `git diff --stat 82cd476^..HEAD -- results/` | no output; empty diff |
 
 ### Remaining TODOs for the owner (untouched)
 
@@ -1065,3 +1065,24 @@ push or tag. `results/` was not written.
 | `README.md:407` | Data permission status (TGJU) |
 
 The verification did not edit any of these.
+
+---
+
+## Author-email history rewrite (2026-11-19)
+
+**Scope:** metadata only. The 84 commits in `origin/main..main` were rewritten with
+`git filter-branch --env-filter` to replace a private author/committer email with the GitHub
+noreply identity. No tree, author date, committer date, subject or parent changed; the
+`--no-ff` merge is preserved. `origin/main` (`d1670cc`) was not rewritten.
+
+| Check | Command | Result |
+|---|---|---|
+| Tip tree identical | `git diff --exit-code backup/pre-email-rewrite-main main` | silent |
+| Per-commit fields | 84 old/new pairs on `%aI`, `%cI`, `%T`, `%s` | 0 mismatches |
+| Emails in the range | `git log --format='%ae %ce' origin/main..main \| sort -u` | one noreply identity |
+| `results/` unchanged | `git diff --exit-code HEAD -- results/` | silent |
+
+The old-to-new map is `docs/COMMIT_MAP.md`. Hash references in `README.md` and the
+non-protocol docs were updated; the protocol bodies keep their hashes and record the change in
+their Errata sections. Backup refs: `backup/pre-email-rewrite-main`,
+`backup/pre-email-rewrite-branch`.

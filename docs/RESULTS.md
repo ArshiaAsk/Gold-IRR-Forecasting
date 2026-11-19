@@ -5,14 +5,14 @@
 `legacy-pre-refactor`). Stages 5a/5b and 6 are complete on this branch and the Stage 6
 independent review is accepted; no merge, push or tag. This document is the Stage 3/4 record
 and later stages do not rewrite its numbers.
-**Stage 3 protocol:** `docs/EVAL_PROTOCOL.md`, committed at `798981a` **before any model fit**;
-one pre-run hold-out amendment at `cb75162` (see §8), and one post-run deviation found in the
+**Stage 3 protocol:** `docs/EVAL_PROTOCOL.md`, committed at `bda5992` **before any model fit**;
+one pre-run hold-out amendment at `74d9369` (see §8), and one post-run deviation found in the
 Stage 4 audit (`docs/EVAL_PROTOCOL.md` §11 D-1, summarized in §2.2 and §11.10).
-**Stage 3 run:** 2026-11-14, code commit `8d7715e`, 1,259.6 s (21.0 min) on 8 CPU cores.
+**Stage 3 run:** 2026-11-14, code commit `479a9ab`, 1,259.6 s (21.0 min) on 8 CPU cores.
 **Stage 3 results:** `results/eval_V1.json`, `results/eval_V2.json`, `results/eval_V3.json`,
-`results/eval_summary.csv`, `results/run.log` (results commit `64c9798`; log commit `5f4abaa`).
-**Stage 4 protocol:** `docs/BACKTEST_PROTOCOL.md`, committed at `0cc0647` before the backtest.
-**Stage 4 run:** 2026-11-16, code commit `9b9caca`, inference only (no training).
+`results/eval_summary.csv`, `results/run.log` (results commit `41a450c`; log commit `e59858c`).
+**Stage 4 protocol:** `docs/BACKTEST_PROTOCOL.md`, committed at `228b904` before the backtest.
+**Stage 4 run:** 2026-11-16, code commit `783ab26`, inference only (no training).
 **Stage 4 results:** `results/backtest.json`, `results/backtest.log`.
 **Artifact:** `models/gold_lstm_stationary_v2.keras` + two scalers + metadata (seed 42; not
 wired into the API or Streamlit until Stage 5a).
@@ -404,7 +404,7 @@ prediction at daily frequency**, not a claim that gold/USD/oil information is ne
 
 **One pre-run amendment, no post-run deviations.**
 
-- **Hold-out definition (pre-run, `cb75162`).** The first draft said "the final 180 rows". A
+- **Hold-out definition (pre-run, `74d9369`).** The first draft said "the final 180 rows". A
   data-shape check showed those begin 2025-11-05 and would skip October. The hold-out is
   therefore all rows dated 2025-10-01 or later — 210 rows, matching the requested "~180 rows,
   2025-10 onward". The amendment was made **before any model fit**; no result was seen.
@@ -569,8 +569,8 @@ test_pipeline.py ..............                                          [100%]
 
 ## 11. Economic reality (Stage 4)
 
-**Protocol:** `docs/BACKTEST_PROTOCOL.md` (`0cc0647`), pre-registered before any backtest
-result. **Run:** `python -m src.backtest_check`, code `9b9caca`, 2026-11-16, inference only
+**Protocol:** `docs/BACKTEST_PROTOCOL.md` (`228b904`), pre-registered before any backtest
+result. **Run:** `python -m src.backtest_check`, code `783ab26`, 2026-11-16, inference only
 (no training). **Results:** `results/backtest.json`, `results/backtest.log`.
 
 ### 11.1 What was tested
@@ -580,7 +580,7 @@ result. **Run:** `python -m src.backtest_check`, code `9b9caca`, 2026-11-16, inf
 - **Predictions:** the committed **seed-42 artifact only**, by inference. Stage 3 saved
   aggregate metrics but no per-row predictions, so per-seed and 5-seed tables are not
   recoverable without retraining; they are dropped. Seed 42 was fixed before the Stage 3 run
-  (`PRIMARY_SEED = 42`, `8d7715e`), not chosen after seeing the hold-out.
+  (`PRIMARY_SEED = 42`, `479a9ab`), not chosen after seeing the hold-out.
 - **Strategies (long/flat, no shorting):** S0 buy-and-hold gold (Rial); S1 buy-and-hold USD
   (Rial); S2 long iff `ŷ > μ_train`; S3 long iff `ŷ > 0`. `μ_train = 0.1561%` is the mean log
   return over the 951 fitting rows (2021-08-28 → 2024-12-31).

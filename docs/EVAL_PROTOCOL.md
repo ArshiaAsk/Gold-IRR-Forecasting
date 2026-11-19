@@ -409,3 +409,11 @@ the same zero share (36.18% ounce, 36.68% oil).
 
 The effect on any reported metric was **not measured**. No sensitivity run was performed; it is
 future work. This entry records the mechanism and its size, and makes no claim about direction.
+
+### E-3 — commit hashes changed by the author-email rewrite (2026-11-19)
+
+The hash `cb75162` in §5.1 is a pre-rewrite hash. On 2026-11-19 the commits in
+`origin/main..main` were rewritten to replace a private author/committer email with the GitHub
+noreply identity. Trees, author dates, committer dates, subjects and the merge structure are
+unchanged, so only the hashes moved: `cb75162` is now `74d9369`. The body above is not
+rewritten (D36 §3). The full old-to-new map is `docs/COMMIT_MAP.md`.

@@ -17,7 +17,7 @@ cannot reproduce them; that is expected.
 
 `results/run.log` records the same shapes: raw prices 1,424 rows (2021-06-14 → 2026-06-13) and
 global series 1,265 rows (2021-06-04 → 2026-06-12). The artifact metadata records commit
-`8d7715e` and `date_utc` `2026-11-14T14:54:57+00:00`.
+`479a9ab` and `date_utc` `2026-11-14T14:54:57+00:00`.
 
 ## Legacy processed file (not used by the committed artifact)
 

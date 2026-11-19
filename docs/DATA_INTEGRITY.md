@@ -1,6 +1,6 @@
 # Data Integrity Investigation
 
-**Stage:** 1 · **Date:** 2026-11-14 · **Branch:** `refactor/honest-portfolio` · **HEAD at start:** `d061bd7`
+**Stage:** 1 · **Date:** 2026-11-14 · **Branch:** `refactor/honest-portfolio` · **HEAD at start:** `ec6bc78`
 **Scope:** read-only. No source, data or model file was modified. All experiments ran in a scratch directory against copies. The original scratch paths (now gone) are shown below as `<scratch>/s1` and `<scratch>/s1b`.
 **Source of the "before" state:** `docs/AUDIT_REPORT.md` (2026-11-13, audit of `d1670cc`).
 
@@ -661,7 +661,7 @@ The scratch scripts are not part of the repository and no longer exist; their ou
 
 # Stage 1b — Independent evidence for the 2023-10-27 → 2025-08-06 block
 
-**Date:** 2026-11-14 · **Branch:** `refactor/honest-portfolio` · **HEAD at start:** `14dec06`
+**Date:** 2026-11-14 · **Branch:** `refactor/honest-portfolio` · **HEAD at start:** `145dc7d`
 **Scope:** read-only. No file under `src/`, `data/`, `models/` or `config/` was modified. All experiments ran in a scratch directory against copies (`<scratch>/s1b` in the original notes).
 **Trigger:** GATE 1, decision G1 = option (c) — resolve the block with sources that already exist inside the project before choosing fix or document.
 

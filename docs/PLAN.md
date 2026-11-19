@@ -8,16 +8,16 @@
 
 | Stage | Status | Commits | Note |
 |---|---|---|---|
-| 0 | done | `d061bd7`, `61d130a` | plan, decisions, state, audit committed |
-| 1 | done | `14dec06` | data-integrity investigation, read-only |
-| 1b | done | `6edf09f` | G1 resolution: Jalali field silent, alignment verified |
+| 0 | done | `ec6bc78`, `e0035cb` | plan, decisions, state, audit committed |
+| 1 | done | `145dc7d` | data-integrity investigation, read-only |
+| 1b | done | `4647f72` | G1 resolution: Jalali field silent, alignment verified |
 | G1-final | done | — | **D19: apply the +1 relabel** (owner) |
-| 2a | done | `d5b8dcd`, `75c927e` | reversible date correction + tests + verification |
-| 2b | done | `147d58b`, `5c6a74a`, `66b2353` | scope reduction, minimal API, repo hygiene |
-| 3 | done | `798981a`, `cb75162`, `37585ac`, `8d7715e`, `64c9798`, `5f4abaa` | no demonstrated edge; GATE 3 accepted; verdict final |
-| 4 | done | `1e3e634`, `0cc0647`, `9b9caca`, `cf09f8d`, `3b5ac3a` | economic reality: no added value over buy-and-hold; `trading_bot/` removed |
-| 5a | done | `1768b2e`, `f587864`, `1bd4a5b`, `f749791`, `e9d65e0` | serving: API + Streamlit on the seed-42 artifact; one feature function; 79 tests |
-| 5b | done | `e6f8210`, `d59dc34`, `60e9870`, `1cf8285`, `361b195`, `eed9ee0`, `539f92b`, `369f151`, `13ce2c6` | reproducibility, Docker, CI, README; 83 tests |
+| 2a | done | `659b257`, `0fb6f2c` | reversible date correction + tests + verification |
+| 2b | done | `a0f8cfd`, `e5751a6`, `0a35d06` | scope reduction, minimal API, repo hygiene |
+| 3 | done | `bda5992`, `74d9369`, `fe932e9`, `479a9ab`, `41a450c`, `e59858c` | no demonstrated edge; GATE 3 accepted; verdict final |
+| 4 | done | `5a8ce1c`, `228b904`, `783ab26`, `35a9769`, `31ae157` | economic reality: no added value over buy-and-hold; `trading_bot/` removed |
+| 5a | done | `92cf95d`, `0074e45`, `9156234`, `60b0e71`, `e16fc67` | serving: API + Streamlit on the seed-42 artifact; one feature function; 79 tests |
+| 5b | done | `45afcae`, `9d3515b`, `10cb5f5`, `067e1f5`, `131e4f3`, `77a4b6f`, `6aa03f3`, `31a057f`, `879d87e` | reproducibility, Docker, CI, README; 83 tests |
 
 ---
 
@@ -74,7 +74,7 @@ Additionally: every number printed in `docs/DATA_INTEGRITY.md` appears verbatim 
 ### GATE 1
 **Owner decides whether the data is fixed before any modeling work.** Options: (a) fix dates and re-derive everything, (b) keep the data as-is and document the defect as a known limitation, (c) stop and re-source the data. No Stage 2 work starts until this is answered.
 
-### Executed — Stage 1 (`14dec06`) and 1b (`6edf09f`)
+### Executed — Stage 1 (`145dc7d`) and 1b (`4647f72`)
 - [x] Date path traced with line numbers; H1–H5 tested; H1/H2/H3/H5 refuted, H4 refuted as cause but a separate merge defect verified.
 - [x] The audit's weekday table shown to be mislabelled (off-by-one label list).
 - [x] A 21-month block (2023-10-27 → 2025-08-06) discovered, present in both TGJU series.
@@ -112,7 +112,7 @@ Additionally: every number printed in `docs/DATA_INTEGRITY.md` appears verbatim 
 ### Deliverables
 Slim tree; `requirements.txt` that installs; `data/sample/`; this plan updated. (`Makefile`, `scripts/check_deps.py` and `docs/SCOPE.md` were dropped from the Stage 2 scope by the owner's instruction; Stage 5b covers the Makefile and dependency checks.)
 
-### Executed — Stage 2a (`d5b8dcd`, `75c927e`) and 2b (`147d58b`, `5c6a74a`, `66b2353`)
+### Executed — Stage 2a (`659b257`, `0fb6f2c`) and 2b (`a0f8cfd`, `e5751a6`, `0a35d06`)
 - [x] Reversible +1 relabel for 2023-10-27 → 2025-08-06 in `DataLoader.get_tgju_history`, window/flag in `config/settings.py`, row count logged every run.
 - [x] Unit tests: exact rows, flag off, no collisions, row count, boundaries (`tests/test_data_loader_date_shift.py`).
 - [x] Verified on the local raw dataset: 503 rows, 0 collisions, 1,424 → 1,424 rows, features 1,424 → 1,394; numbers in `docs/DATA_INTEGRITY.md` → "Stage 2a — Applied fix".
@@ -142,9 +142,9 @@ Slim tree; `requirements.txt` that installs; `data/sample/`; this plan updated. 
 - [x] Save machine-readable results to `results/` and paste the console output into
   `docs/RESULTS.md`.
 
-### Executed — Stage 3 (`798981a`, `cb75162`, `37585ac`, `8d7715e`, `64c9798`, `5f4abaa`)
+### Executed — Stage 3 (`bda5992`, `74d9369`, `fe932e9`, `479a9ab`, `41a450c`, `e59858c`)
 - [x] `docs/EVAL_PROTOCOL.md` pre-registered before any model fit; one pre-run hold-out amendment
-  (2025-10-01 cutoff, 210 rows) at `cb75162`; no post-run deviations.
+  (2025-10-01 cutoff, 210 rows) at `74d9369`; no post-run deviations.
 - [x] Data variants: V1 raw, V2 corrected (primary), V3 block excluded. V2 re-pairs the global
   series with one complete Yahoo vintage (D23); V3 drops the block and never lets an LSTM
   sequence cross the gap.
@@ -195,8 +195,8 @@ reproducibility/docs. Recorded as D25–D28 in `docs/DECISIONS.md`.
 earned on the hold-out, after costs, against buy-and-hold gold and USD — so the README can
 state the economic conclusion with numbers. This is **not** a search for a profitable strategy.
 
-### Executed — Stage 4 (`1e3e634`, `0cc0647`, `9b9caca`, `cf09f8d`, `3b5ac3a`)
-- [x] `docs/BACKTEST_PROTOCOL.md` pre-registered and committed (`0cc0647`) before any result:
+### Executed — Stage 4 (`5a8ce1c`, `228b904`, `783ab26`, `35a9769`, `31ae157`)
+- [x] `docs/BACKTEST_PROTOCOL.md` pre-registered and committed (`228b904`) before any result:
       hold-out only, seed-42 artifact by inference, S0–S3, four cost scenarios, block bootstrap,
       fixed decision rule.
 - [x] `src/backtest_check.py` + `tests/test_backtest_check.py`: 9 tests (cost on each change,
@@ -253,9 +253,9 @@ streamlit run streamlit_app.py                # starts and predicts
 pytest tests/ -q                              # green
 ```
 
-### Executed — Stage 5a (`1768b2e`, `f587864`, `1bd4a5b`, `f749791`, `e9d65e0`)
+### Executed — Stage 5a (`92cf95d`, `0074e45`, `9156234`, `60b0e71`, `e16fc67`)
 
-Design committed first (`docs/SERVING_DESIGN.md`, `1768b2e`) before any serving code. Then:
+Design committed first (`docs/SERVING_DESIGN.md`, `92cf95d`) before any serving code. Then:
 
 1. `src/feature_eng.py` gained `prepare_model_input`, the single raw-row adapter, plus the
    documented constants (`MIN_HISTORY_ROWS = 89`, `MAX_HISTORY_ROWS = 5000`,
@@ -295,32 +295,32 @@ Not changed: `results/`, `models/`, `docs/EVAL_PROTOCOL.md`, `docs/BACKTEST_PROT
       `docs/README_CLAIMS.md` records every claim with its source.
 
 ### Executed — Stage 5b
-- `e6f8210` — release plan committed **before** any Stage 5b change.
-- `d59dc34` — root `test_pipeline.py` moved to `tests/`; one `pytest` command collects all
+- `45afcae` — release plan committed **before** any Stage 5b change.
+- `9d3515b` — root `test_pipeline.py` moved to `tests/`; one `pytest` command collects all
   **83** tests (the old 44 = 30 under `tests/` + 14 at the root; plain `pytest` saw only 30).
-- `60e9870` — runtime/development dependency split; `tensorflow-cpu` for serving; Python 3.12.
-- `1cf8285` — MIT `LICENSE`, predictions ignored, notebooks cleared and moved, legacy model
+- `10cb5f5` — runtime/development dependency split; `tensorflow-cpu` for serving; Python 3.12.
+- `067e1f5` — MIT `LICENSE`, predictions ignored, notebooks cleared and moved, legacy model
   removed.
-- `361b195` — single-service Dockerfile, digest-pinned, non-root, healthcheck; HF Space port
+- `131e4f3` — single-service Dockerfile, digest-pinned, non-root, healthcheck; HF Space port
   config removed; one-service compose kept and documented.
-- `eed9ee0` — CI workflow.
-- `539f92b` — opt-in `--save-predictions`; scratch smoke run in a temporary directory; note in
+- `77a4b6f` — CI workflow.
+- `6aa03f3` — opt-in `--save-predictions`; scratch smoke run in a temporary directory; note in
   `docs/RESULTS.md` that the headline numbers predate the flag.
-- `369f151` — final `README.md`, `docs/README_CLAIMS.md`, `scripts/check_readme_numbers.py`,
+- `31a057f` — final `README.md`, `docs/README_CLAIMS.md`, `scripts/check_readme_numbers.py`,
   `tests/test_readme_numbers.py`.
-- `13ce2c6` — Makefile and `scripts/fetch_data.py`.
-- `416eed5` — D31 (GATE 5a accepted) and D32 (Stage 5b mechanics) in `docs/DECISIONS.md`.
-- `7fff2dd` — this file: Stage 5b rewritten as an executed log.
-- `f996ee8` — README: Docker is primary; the hold-out sentence stops claiming it can rule out
+- `879d87e` — Makefile and `scripts/fetch_data.py`.
+- `9b93902` — D31 (GATE 5a accepted) and D32 (Stage 5b mechanics) in `docs/DECISIONS.md`.
+- `ecb89c7` — this file: Stage 5b rewritten as an executed log.
+- `20ee917` — README: Docker is primary; the hold-out sentence stops claiming it can rule out
   an effect.
-- `746575a` — README Docker section and `make install` / `make check`; the claims rows; the
+- `0130a5e` — README Docker section and `make install` / `make check`; the claims rows; the
   `.dockerignore` rule for opt-in predictions.
-- `49e117e` — `docs/STATE.md` acceptance outputs, including the Docker build and run evidence.
-- `799069d` — the diff figures in `docs/STATE.md` corrected to the measured values.
-- `074e5b1` — a note on the absolute paths left in `results/run.log` and `results/backtest.log`.
-- `3b476b9` — the diff figures in `docs/STATE.md` synced to the committed tree.
+- `62608ce` — `docs/STATE.md` acceptance outputs, including the Docker build and run evidence.
+- `29133b4` — the diff figures in `docs/STATE.md` corrected to the measured values.
+- `3822ef8` — a note on the absolute paths left in `results/run.log` and `results/backtest.log`.
+- `7431d75` — the diff figures in `docs/STATE.md` synced to the committed tree.
 
-Documentation only after `539f92b`; no code, model or committed result changed.
+Documentation only after `6aa03f3`; no code, model or committed result changed.
 
 The image was built and run after the last code commit: 2.99 GB, 4,224.9 s of build time,
 `healthy`, and a prediction bit-identical to a local run. That evidence is in

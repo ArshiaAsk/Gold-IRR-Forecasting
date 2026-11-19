@@ -13,7 +13,7 @@ byte-identical.
 | 3 | Wording (must-fix 4, 5 and should-fix) | Fix "no shorting except S3", "touched once", the Streamlit header, the "87 tests" count, the RESULTS/PLAN status headers, and the sample-README "not enough to evaluate" sentence | `grep -n "no shorting except\|touched once\|scored once\|87 tests\|not.*enough to train or evaluate" README.md docs/RESULTS.md streamlit_app.py data/sample/README.md` (no stale hits); `python scripts/check_readme_numbers.py` |
 | 4 | D-1 share | Recompute the share from the artifact's validation predictions; state the denominator for 0.4982% and 0.86%; correct README; append an Errata entry to `docs/EVAL_PROTOCOL.md`; re-check the verdict | `python scripts/d1_share.py`; `grep -n "0.69\|0.4982\|0.86" README.md docs/EVAL_PROTOCOL.md` |
 | 5 | Global-grid disclosure | Add `scripts/global_grid_audit.py` (read-only, no model runs); commit `docs/GLOBAL_GRID_AUDIT.md`; add the measured shares to README Limitations and the EVAL_PROTOCOL Errata; state that the effect is unmeasured and the sensitivity run is future work | `python scripts/global_grid_audit.py` (compare with `docs/GLOBAL_GRID_AUDIT.md`) |
-| 6 | Pre-registration timing | Add one factual README Limitations sentence with the commit and first-fit timestamps and the reason for the amendment | `grep -n "18:02:01\|18:03:57" README.md`; `git log -1 --format=%cI cb75162`; `head -1 results/run.log` |
+| 6 | Pre-registration timing | Add one factual README Limitations sentence with the commit and first-fit timestamps and the reason for the amendment | `grep -n "18:02:01\|18:03:57" README.md`; `git log -1 --format=%cI 74d9369`; `head -1 results/run.log` |
 | 7 | Cleanup (nice-to-have) | Delete `TradingConfig` and other dead config; the unused pytest fixture; the stale mlflow/onnx/trading_bot ignore rules; the outdated "API/MLOps/training logs" docstring; make `src/utils.py` lazy; grep for removed components | `grep -rn "TradingConfig\|mock_prediction\|mlflow\|onnx\|trading_bot" --include='*.py' --include='*.md' --include='.gitignore' .` (only historical records); `python -m pytest -q` |
 | 8 | Verify | Rebuild and run the Docker image; capture `/health`, a sample `/predict` with the CSV headers, and a 401; run `make check`; update `docs/README_CLAIMS.md` and `docs/STATE.md` | `make check`; `docker build -t gold-irr-honest-forecasting .`; `curl` commands in `docs/STATE.md` |
 
@@ -22,7 +22,7 @@ byte-identical.
 Investigated before changing anything, read-only.
 
 **What the artifact was trained on.** `models/gold_lstm_stationary_v2.metadata.json` records
-`git_commit: 8d7715e`, `date_utc: 2026-11-14T14:54:57+00:00`, training window 2021-08-28 →
+`git_commit: 479a9ab`, `date_utc: 2026-11-14T14:54:57+00:00`, training window 2021-08-28 →
 2024-12-31 and validation window 2025-02-08 → 2025-09-30. `results/run.log` records the same run
 starting at `2026-11-14 18:03:57,480` and the inputs: "Raw prices: 1424 rows
 2021-06-14..2026-06-13; global series: 1265 rows 2021-06-04..2026-06-12". The two untracked
@@ -122,8 +122,8 @@ Limitations bullet and Errata E-2 say so explicitly and make no claim about dire
 
 | Event | Timestamp | Source |
 |---|---|---|
-| Pre-registered protocol | 2026-11-14 17:59:11 +03:30 | `git log -1 --format=%cI 798981a` |
-| Hold-out amendment (2025-10-01 cutoff) | 2026-11-14 18:02:01 +03:30 | `git log -1 --format=%cI cb75162` |
+| Pre-registered protocol | 2026-11-14 17:59:11 +03:30 | `git log -1 --format=%cI bda5992` |
+| Hold-out amendment (2025-10-01 cutoff) | 2026-11-14 18:02:01 +03:30 | `git log -1 --format=%cI 74d9369` |
 | First model fit | 2026-11-14 18:03:57,480 | `head -1 results/run.log` |
 
 The amendment came 1 min 56 s before the first fit. Reason: the first draft said "the final 180

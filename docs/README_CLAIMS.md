@@ -28,7 +28,7 @@ Paths are relative to the repository root. `eval_V2.json` means `results/eval_V2
 | That overlap is 1 of 173 labels and 0.69% of validation loss | `scripts/d1_share.py`; `docs/EVAL_PROTOCOL.md` Errata E-1 | ran the script: exact share 0.691161%, zero-prediction approximation 0.498226%, reviewer ratio 0.861932 |
 | The global series is forward-filled onto the Iranian grid; 36% zero, 19% multi-day | `docs/GLOBAL_GRID_AUDIT.md`; `scripts/global_grid_audit.py` | ran the script; output matches the committed table (V1 35.80%/19.08%, V2 36.02%/18.93%, V3 36.01%/19.00%) |
 | The effect of the global grid on the results was not measured; sensitivity run is future work | `docs/GLOBAL_GRID_AUDIT.md` §"What was not measured"; Errata E-2 | read both; no model run was performed |
-| The hold-out amendment predates the first fit (18:02:01 vs 18:03:57) | `git log -1 --format=%cI cb75162`; `head -1 results/run.log` | ran both; `798981a` pre-registration at 17:59:11 |
+| The hold-out amendment predates the first fit (18:02:01 vs 18:03:57) | `git log -1 --format=%cI 74d9369`; `head -1 results/run.log` | ran both; `bda5992` pre-registration at 17:59:11 |
 | No shorting anywhere; S3 is long when the prediction is positive | `results/backtest.json` → `strategies.*.S3`; `src/backtest_check.py` | read the strategy code and the JSON; S3 holds gold or cash, never a short |
 | 91 tests collected; 88 pass + 3 skip in a clean clone | `pytest --collect-only`; `tests/test_serving_parity.py`, `tests/test_api_contract.py` skip markers | `make test` → 91 passed with the snapshot; 88 passed, 3 skipped without it |
 | Seed 42 fixed before the run | `src/evaluate.py` `PRIMARY_SEED = 42`; `docs/DECISIONS.md` D27 | read the code and D27 |

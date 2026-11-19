@@ -302,3 +302,19 @@ the expected outcome.
 and 5-seed tables dropped; touch count stated in §2.4) was agreed by the owner **before** this
 file was committed and before any backtest result existed. Any change made after seeing a
 result is appended here with its own commit.
+
+---
+
+## Errata (append-only)
+
+Corrections to the pre-registered text above. The body is not rewritten.
+
+### E-1 — commit hashes changed by the author-email rewrite (2026-11-19)
+
+The hashes in §10 and in the artifact metadata are pre-rewrite hashes. On 2026-11-19 the
+commits in `origin/main..main` were rewritten to replace a private author/committer email with
+the GitHub noreply identity. Trees, author dates, committer dates, subjects and the merge
+structure are unchanged, so only the hashes moved. The body above is not rewritten (D36 §3).
+The full old-to-new map is `docs/COMMIT_MAP.md`; the pairs used in this file are
+`0cc0647` → `228b904`, `9b9caca` → `783ab26`, `8d7715e` → `479a9ab`, `64c9798` → `41a450c`
+and `5f4abaa` → `e59858c`.
