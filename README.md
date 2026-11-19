@@ -167,9 +167,9 @@ The image is the only deployment artifact: one Python 3.12 slim image, non-root 
 overriding the command.
 
 ```bash
-docker build -t gold-irr-honest-forecasting .
-docker run --rm -p 8000:8000 -e API_KEY=demo-key gold-irr-honest-forecasting
-docker run --rm -p 8501:8501 gold-irr-honest-forecasting \
+docker build -t gold-irr-forecasting .
+docker run --rm -p 8000:8000 -e API_KEY=demo-key gold-irr-forecasting
+docker run --rm -p 8501:8501 gold-irr-forecasting \
   streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
 ```
 
@@ -355,9 +355,9 @@ are undocumented and may break without notice.
   metrics that contradicted its own artifacts (price R² presented as skill, a backtest return
   that did not match the shipped files, toman instead of rial, a different architecture). None
   of it is repeated here.
-* **The legacy tag exists and is deliberate.** `legacy-pre-refactor` points at the pre-refactor
-  state so the removed bot, MLOps layer and old README remain reachable. Nothing in this branch
-  depends on them.
+* **The legacy tag exists and is deliberate.** The project was originally named
+  `Gold_Usd_Oil_IRR`; `legacy-pre-refactor` preserves that version, so the removed bot, MLOps
+  layer and old README remain reachable. Nothing in this branch depends on them.
 
 ## Lessons learned
 
@@ -413,12 +413,12 @@ or claim in this repository.
 
 * **How to cite:** If you reference this work, please cite it as:
 
-    @software{gold_irr_honest_forecasting,
+    @software{gold_irr_forecasting,
       author  = {Askarzadeh, Arshia},
       title   = {Forecasting Iranian Gold (IRR): an end-to-end pipeline and an honest negative result},
       year    = {2026},
       version = {1.0.0},
-      url     = {https://github.com/ArshiaAsk/Gold-AI-Bot}
+      url     = {https://github.com/ArshiaAsk/Gold-IRR-Forecasting}
     }
 * **Data permission status:** The code is released under the MIT License. **The license does not cover the data.**
 

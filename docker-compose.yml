@@ -7,7 +7,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: gold-irr-honest-forecasting
+    image: gold-irr-forecasting
     ports:
       - "8000:8000"
     environment:

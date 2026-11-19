@@ -4,7 +4,7 @@
 PYTHON ?= $(shell if [ -x .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi)
 PORT ?= 8000
 APP_PORT ?= 8501
-IMAGE ?= gold-irr-honest-forecasting
+IMAGE ?= gold-irr-forecasting
 
 .PHONY: help install test check evaluate backtest api app docker-build docker-run fetch-data
 
